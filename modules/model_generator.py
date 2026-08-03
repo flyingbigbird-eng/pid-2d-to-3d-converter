@@ -248,22 +248,38 @@ def generate_assembly(match_result: MatchResult, output_dir: str = "",
         except Exception:
             pass
 
-        # 导出STEP: 如果零件来自STEP文件，复制原始STEP文件
-        if step_library_path and os.path.exists(step_library_path):
-            import shutil
-            step_out = os.path.join(output_dir, "assembly.stp")
-            try:
-                shutil.copy2(step_library_path, step_out)
-            except Exception:
-                pass
-        else:
-            # 没有STEP零件库，用trimesh尝试导出STEP
-            step_out = os.path.join(output_dir, "assembly.stp")
-            try:
+        # 导出STEP: 根据实际匹配的组件，从原始STEP库中筛选对应零件
+        step_out = os.path.join(output_dir, "assembly.stp")
+        try:
+            if step_library_path and os.path.exists(step_library_path):
+                # 收集实际匹配到的组件名称
+                comp_names = []
+                for p in parts:
+                    if p.source == "library" or p.part_type in ("valve", "fitting", "sensor"):
+                        comp_names.append(p.name)
+                
+                if comp_names:
+                    # 用step_filter筛选出匹配的零件
+                    from .step_filter import filter_step_file
+                    filter_step_file(step_library_path, comp_names, step_out)
+                else:
+                    # 没有匹配组件，导出空壳体STL作为替代
+                    if result.combined_mesh:
+                        result.combined_mesh.export(
+                            os.path.join(output_dir, "assembly.stl")
+                        )
+            else:
+                # 没有STEP零件库，用trimesh尝试导出
                 if result.combined_mesh:
                     result.combined_mesh.export(step_out, file_type='step')
+        except Exception as e:
+            print(f"Warning: STEP export failed: {e}, trying STL fallback")
+            try:
+                if result.combined_mesh:
+                    alt_path = os.path.join(output_dir, "assembly.stl")
+                    result.combined_mesh.export(alt_path)
             except Exception:
-                pass  # STEP导出可能不支持，跳过
+                pass
 
     return result
 

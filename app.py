@@ -316,7 +316,10 @@ def api_download(assembly_id, filename):
     if not os.path.exists(file_path):
         return jsonify({"error": f"文件不存在: {filename}"}), 404
 
-    return send_file(file_path, as_attachment=True, download_name=filename)
+    # 支持自定义下载文件名
+    custom_name = request.args.get('name', '')
+    download_name = custom_name if custom_name else filename
+    return send_file(file_path, as_attachment=True, download_name=download_name)
 
 
 # ============= 直接解析预览 =============

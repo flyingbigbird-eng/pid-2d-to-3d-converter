@@ -348,12 +348,24 @@
         2D→3D 转换程序 | 学习阶段输入：2D+点料表+3D参考 | 使用阶段输入：2D+点料表 → 输出：3D
     </div>
 
-    <!-- Three.js for 3D preview -->
-    <script src="/static/js/three.min.js"></script>
-    <script src="/static/js/GLTFLoader.js"></script>
-    <script src="/static/js/OrbitControls.js"></script>
+    <!-- Three.js for 3D preview (动态加载，适配反向代理路径) -->
+    <script>
+        (function() {
+            var base = window.location.pathname.includes('/pid3d') ? '/pid3d' : '';
+            ['three.min.js', 'GLTFLoader.js', 'OrbitControls.js'].forEach(function(f) {
+                var s = document.createElement('script');
+                s.src = base + '/static/js/' + f;
+                s.async = false;
+                document.head.appendChild(s);
+            });
+        })();
+    </script>
 
     <script>
+        // ============ 自动检测base path（本地开发 or 反向代理） ============
+        const API_BASE = window.location.pathname.includes('/pid3d') ? '/pid3d' : '';
+        const STATIC_BASE = window.location.pathname.includes('/pid3d') ? '/pid3d/static' : '/static';
+
         // ============ 模式切换 ============
         function switchMode(mode) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
@@ -424,7 +436,7 @@
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 300000);
 
-                const resp = await fetch('/api/generate', {
+                const resp = await fetch(`${API_BASE}/api/generate`, {
                     method: 'POST', body: formData, signal: controller.signal
                 });
                 clearTimeout(timeoutId);
@@ -511,7 +523,7 @@
 
             // 加载GLB
             const loader = new THREE.GLTFLoader();
-            const url = `/api/download/${assemblyId}/assembly.glb`;
+            const url = `${API_BASE}/api/download/${assemblyId}/assembly.glb`;
             loader.load(url, function(gltf) {
                 threeScene.add(gltf.scene);
                 // 自动居中
@@ -524,12 +536,78 @@
                 threeCamera.position.set(maxDim * 1.5, maxDim, maxDim * 1.5);
                 threeControls.target.set(0, 0, 0);
                 threeControls.update();
+
+                // 加载零件标签
+                loadPartLabels(assemblyId, center);
             }, undefined, function(error) {
                 console.error('GLB加载失败', error);
                 container.innerHTML = '<p style="text-align:center;padding:40px;color:#999;">3D模型加载失败，请检查GLB文件</p>';
             });
 
             animate();
+        }
+
+        // 创建文字标签精灵
+        function createTextSprite(text, color) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const fontSize = 32;
+            ctx.font = `bold ${fontSize}px Microsoft YaHei, sans-serif`;
+            const textWidth = ctx.measureText(text).width;
+            canvas.width = textWidth + 20;
+            canvas.height = fontSize + 16;
+
+            // 重新设置（canvas resize会清除context）
+            ctx.font = `bold ${fontSize}px Microsoft YaHei, sans-serif`;
+            ctx.fillStyle = 'rgba(255,255,255,0.85)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = color || '#1a73e8';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = color || '#1a73e8';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            const material = new THREE.SpriteMaterial({ map: texture, depthTest: false });
+            const sprite = new THREE.Sprite(material);
+            sprite.scale.set(canvas.width * 0.3, canvas.height * 0.3, 1);
+            return sprite;
+        }
+
+        // 加载零件标签并添加到3D场景
+        function loadPartLabels(assemblyId, modelCenter) {
+            fetch(`${API_BASE}/api/assembly/${assemblyId}`)
+                .then(r => r.json())
+                .then(data => {
+                    const parts = (data.assembly_result || {}).parts || [];
+                    const typeColors = {
+                        'valve': '#e53e3e',
+                        'fitting': '#3182ce',
+                        'pipe': '#38a169',
+                        'sensor': '#d69e2e',
+                        'shell': '#666666',
+                    };
+                    parts.forEach(part => {
+                        // 只给阀门/接头/传感器加标签，不给管道和壳体加
+                        if (part.part_type === 'pipe' || part.part_type === 'shell') return;
+
+                        const pos = part.position;
+                        const label = part.part_id.replace('comp_', '') || part.name;
+                        const color = typeColors[part.part_type] || '#1a73e8';
+                        const sprite = createTextSprite(label, color);
+                        // 标签位置：零件上方，加上模型中心的偏移（因为整体做了居中偏移）
+                        sprite.position.set(
+                            pos[0] - modelCenter.x,
+                            pos[2] - modelCenter.z + 40,  // y轴上方
+                            pos[1] - modelCenter.y
+                        );
+                        sprite.renderOrder = 999;
+                        threeScene.add(sprite);
+                    });
+                })
+                .catch(err => console.error('加载标签失败', err));
         }
 
         function animate() {
@@ -541,13 +619,25 @@
         // ============ 下载 ============
         function downloadFile(filename) {
             if (!currentAssemblyId) return;
-            window.location.href = `/api/download/${currentAssemblyId}/${filename}`;
+            // 生成文件名：项目名_日期时间.扩展名
+            const now = new Date();
+            const ts = now.getFullYear() +
+                String(now.getMonth() + 1).padStart(2, '0') +
+                String(now.getDate()).padStart(2, '0') + '_' +
+                String(now.getHours()).padStart(2, '0') +
+                String(now.getMinutes()).padStart(2, '0') +
+                String(now.getSeconds()).padStart(2, '0');
+            const ext = filename.split('.').pop();
+            const baseName = filename.replace(/\.[^.]+$/, '');
+            const projectName = document.getElementById('gen-project-name')?.value || 'output';
+            const downloadName = `${projectName}_${ts}.${ext}`;
+            window.location.href = `${API_BASE}/api/download/${currentAssemblyId}/${filename}?name=${encodeURIComponent(downloadName)}`;
         }
 
         // ============ 加载匹配详情 ============
         async function loadAssemblyDetail(assemblyId) {
             try {
-                const resp = await fetch(`/api/assembly/${assemblyId}`);
+                const resp = await fetch(`${API_BASE}/api/assembly/${assemblyId}`);
                 const data = await resp.json();
                 const components = data.match_result?.components || [];
 
@@ -588,7 +678,7 @@
             formData.append('bom_file', bomFile);
 
             try {
-                const resp = await fetch('/api/parse/preview', { method: 'POST', body: formData });
+                const resp = await fetch(`${API_BASE}/api/parse/preview`, { method: 'POST', body: formData });
                 const data = await resp.json();
                 if (data.error) { alert(data.error); return; }
 
@@ -650,7 +740,7 @@
             for (const f of libFiles) formData.append('library_files', f);
 
             try {
-                const resp = await fetch('/api/learn', { method: 'POST', body: formData });
+                const resp = await fetch(`${API_BASE}/api/learn`, { method: 'POST', body: formData });
                 const data = await resp.json();
                 if (data.error) { alert(data.error); return; }
                 showLearnResult(data);
@@ -694,7 +784,7 @@
         // ============ 知识库 ============
         async function loadKnowledge() {
             try {
-                const resp = await fetch('/api/knowledge');
+                const resp = await fetch(`${API_BASE}/api/knowledge`);
                 const data = await resp.json();
                 const content = document.getElementById('knowledge-content');
 
