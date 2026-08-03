@@ -1,0 +1,384 @@
+{
+  "case_name": "8B-CU设备",
+  "part_mappings": [
+    {
+      "pid_type": "KS",
+      "pid_pipe_size": "",
+      "bom_name_pattern": "流量计",
+      "bom_supplier": "东京计装",
+      "library_part": "",
+      "library_part_path": "",
+      "match_confidence": 0.35,
+      "occurrence_count": 4
+    },
+    {
+      "pid_type": "KS",
+      "pid_pipe_size": "",
+      "bom_name_pattern": "流量计1-1/2\"",
+      "bom_supplier": "基恩士",
+      "library_part": "",
+      "library_part_path": "",
+      "match_confidence": 0.35,
+      "occurrence_count": 1
+    },
+    {
+      "pid_type": "KS",
+      "pid_pipe_size": "",
+      "bom_name_pattern": "超声波流量计",
+      "bom_supplier": "东京计装",
+      "library_part": "",
+      "library_part_path": "",
+      "match_confidence": 0.35,
+      "occurrence_count": 2
+    }
+  ],
+  "topology_rules": [
+    {
+      "medium": "Unknown",
+      "pipe_size": "",
+      "size_mm": 0.0,
+      "typical_length_mm": 358.13,
+      "direction": "mixed",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "3A",
+      "size_mm": 3.0,
+      "typical_length_mm": 204.73,
+      "direction": "vertical",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "2A",
+      "size_mm": 2.0,
+      "typical_length_mm": 330.52,
+      "direction": "vertical",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "1A",
+      "size_mm": 1.0,
+      "typical_length_mm": 263.3,
+      "direction": "vertical",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "3/4\"-PFA-DRAIN",
+      "size_mm": 0.0,
+      "typical_length_mm": 1.2,
+      "direction": "horizontal",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "1/4\"",
+      "size_mm": 6.35,
+      "typical_length_mm": 1.2,
+      "direction": "vertical",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "210A",
+      "size_mm": 210.0,
+      "typical_length_mm": 17.2,
+      "direction": "horizontal",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "7A",
+      "size_mm": 7.0,
+      "typical_length_mm": 531.59,
+      "direction": "vertical",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "1/4\"->3/8\"",
+      "size_mm": 0.0,
+      "typical_length_mm": 1.24,
+      "direction": "horizontal",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "320A",
+      "size_mm": 320.0,
+      "typical_length_mm": 17.72,
+      "direction": "horizontal",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "1/4\" PFA951",
+      "size_mm": 0.0,
+      "typical_length_mm": 1.17,
+      "direction": "horizontal",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "25A",
+      "size_mm": 25,
+      "typical_length_mm": 16.68,
+      "direction": "horizontal",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "20A",
+      "size_mm": 20,
+      "typical_length_mm": 1.17,
+      "direction": "horizontal",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "50A",
+      "size_mm": 50,
+      "typical_length_mm": 19.18,
+      "direction": "horizontal",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "1/2\"->3/4\"",
+      "size_mm": 0.0,
+      "typical_length_mm": 1.32,
+      "direction": "horizontal",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "1/4\"-PFA-DRAIN",
+      "size_mm": 0.0,
+      "typical_length_mm": 21.6,
+      "direction": "horizontal",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "1/4\" PFA",
+      "size_mm": 0.0,
+      "typical_length_mm": 1.63,
+      "direction": "horizontal",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "1/2\" PFA",
+      "size_mm": 0.0,
+      "typical_length_mm": 1.63,
+      "direction": "horizontal",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "1\"",
+      "size_mm": 25.4,
+      "typical_length_mm": 68.19,
+      "direction": "vertical",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "3/4\"",
+      "size_mm": 19.05,
+      "typical_length_mm": 70.87,
+      "direction": "vertical",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "1/2\"-SS316 BA",
+      "size_mm": 0.0,
+      "typical_length_mm": 1.26,
+      "direction": "horizontal",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "1/2\" VCR",
+      "size_mm": 0.0,
+      "typical_length_mm": 1.26,
+      "direction": "vertical",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "1/2\"-SS316LEP",
+      "size_mm": 0.0,
+      "typical_length_mm": 1.26,
+      "direction": "horizontal",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "1/2\" SWG",
+      "size_mm": 0.0,
+      "typical_length_mm": 7.0,
+      "direction": "vertical",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "1\"->1-1/4\"",
+      "size_mm": 0.0,
+      "typical_length_mm": 1.23,
+      "direction": "vertical",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "3/4\"-PP-DRAIN",
+      "size_mm": 0.0,
+      "typical_length_mm": 20.2,
+      "direction": "horizontal",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "1-1/4\"",
+      "size_mm": 31.75,
+      "typical_length_mm": 586.46,
+      "direction": "vertical",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "1-1/2\"",
+      "size_mm": 38.1,
+      "typical_length_mm": 0.97,
+      "direction": "horizontal",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "3/4\"-PVDF-DRAIN",
+      "size_mm": 0.0,
+      "typical_length_mm": 20.76,
+      "direction": "horizontal",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "5A",
+      "size_mm": 5.0,
+      "typical_length_mm": 246.83,
+      "direction": "vertical",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "321A",
+      "size_mm": 321.0,
+      "typical_length_mm": 13.8,
+      "direction": "horizontal",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "211A",
+      "size_mm": 211.0,
+      "typical_length_mm": 16.21,
+      "direction": "horizontal",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "1/4\"-SS-DRAIN",
+      "size_mm": 0.0,
+      "typical_length_mm": 1.1,
+      "direction": "horizontal",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "15Ax1/2\"",
+      "size_mm": 0.0,
+      "typical_length_mm": 1.21,
+      "direction": "vertical",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "1\"(50A)-PFA 951(CPVC)",
+      "size_mm": 0.0,
+      "typical_length_mm": 1.21,
+      "direction": "horizontal",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "1/2\"-PFA-DRAIN",
+      "size_mm": 0.0,
+      "typical_length_mm": 19.9,
+      "direction": "horizontal",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "1-1/4\"->1-1/2\"",
+      "size_mm": 0.0,
+      "typical_length_mm": 4.02,
+      "direction": "vertical",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "1-1/4\"(50A)-PFA 951(CPVC)",
+      "size_mm": 0.0,
+      "typical_length_mm": 4.02,
+      "direction": "vertical",
+      "branch_count": 0
+    },
+    {
+      "medium": "Unknown",
+      "pipe_size": "3/4\"-SS-DRAIN",
+      "size_mm": 0.0,
+      "typical_length_mm": 14.32,
+      "direction": "horizontal",
+      "branch_count": 0
+    }
+  ],
+  "assembly_rules": [
+    {
+      "component_type": "KS",
+      "spacing_mm": 564.86,
+      "orientation": "horizontal",
+      "base_offset": [
+        0,
+        0,
+        0
+      ]
+    }
+  ],
+  "hidden_param_rules": [],
+  "pid_summary": {
+    "component_count": 445,
+    "pipe_count": 9715,
+    "extents": [
+      2664.797433541013,
+      -18074.92391888932,
+      31946.3096291253,
+      10899.01516174666
+    ]
+  },
+  "bom_summary": {
+    "total_materials": 1063,
+    "category_stats": {
+      "other": 304,
+      "valve": 121,
+      "fitting": 358,
+      "pipe": 32,
+      "sensor": 40,
+      "accessory": 11,
+      "shell": 197
+    }
+  }
+}

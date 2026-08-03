@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D→3D 转换程序</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, "Microsoft YaHei", sans-serif;
+            background: #f0f2f5; color: #333; min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #1a73e8, #0d47a1);
+            color: #fff; padding: 16px 32px; display: flex;
+            align-items: center; justify-content: space-between;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        .header h1 { font-size: 22px; font-weight: 600; }
+        .header .subtitle { font-size: 13px; opacity: 0.85; margin-top: 2px; }
+        .header .nav { display: flex; gap: 8px; }
+        .nav-btn {
+            background: rgba(255,255,255,0.15); color: #fff; border: 1px solid rgba(255,255,255,0.3);
+            padding: 8px 20px; border-radius: 6px; cursor: pointer; font-size: 14px;
+            transition: all 0.2s;
+        }
+        .nav-btn:hover { background: rgba(255,255,255,0.25); }
+        .nav-btn.active { background: rgba(255,255,255,0.3); font-weight: 600; }
+
+        .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+
+        .card {
+            background: #fff; border-radius: 10px; padding: 24px;
+            margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        .card-title {
+            font-size: 18px; font-weight: 600; margin-bottom: 16px;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .card-title .badge {
+            font-size: 11px; padding: 2px 8px; border-radius: 10px;
+            background: #e3f2fd; color: #1565c0;
+        }
+
+        .upload-area {
+            border: 2px dashed #ccc; border-radius: 8px; padding: 32px;
+            text-align: center; cursor: pointer; transition: all 0.2s;
+            background: #fafafa;
+        }
+        .upload-area:hover { border-color: #1a73e8; background: #f5f8ff; }
+        .upload-area.dragover { border-color: #1a73e8; background: #e8f0fe; }
+        .upload-area .icon { font-size: 36px; color: #999; margin-bottom: 8px; }
+        .upload-area .text { font-size: 14px; color: #666; }
+        .upload-area .hint { font-size: 12px; color: #aaa; margin-top: 4px; }
+        .upload-area input { display: none; }
+        .file-list { margin-top: 8px; }
+        .file-item {
+            display: flex; align-items: center; gap: 8px; padding: 6px 12px;
+            background: #f5f5f5; border-radius: 4px; margin-top: 4px; font-size: 13px;
+        }
+        .file-item .remove { color: #f44336; cursor: pointer; margin-left: auto; }
+
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+
+        .btn {
+            padding: 10px 28px; border: none; border-radius: 6px; font-size: 15px;
+            cursor: pointer; transition: all 0.2s; font-weight: 500;
+        }
+        .btn-primary { background: #1a73e8; color: #fff; }
+        .btn-primary:hover { background: #1557b0; }
+        .btn-success { background: #4caf50; color: #fff; }
+        .btn-success:hover { background: #3d8b40; }
+        .btn:disabled { background: #ccc; cursor: not-allowed; }
+
+        .tabs { display: flex; gap: 0; border-bottom: 2px solid #e0e0e0; margin-bottom: 16px; }
+        .tab {
+            padding: 10px 24px; cursor: pointer; font-size: 14px; color: #666;
+            border-bottom: 3px solid transparent; transition: all 0.2s;
+        }
+        .tab:hover { color: #333; }
+        .tab.active { color: #1a73e8; border-bottom-color: #1a73e8; font-weight: 600; }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin-bottom: 16px; }
+        .stat-card {
+            background: #f5f7fa; border-radius: 8px; padding: 16px; text-align: center;
+        }
+        .stat-card .value { font-size: 28px; font-weight: 700; color: #1a73e8; }
+        .stat-card .label { font-size: 12px; color: #888; margin-top: 4px; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th { background: #f5f5f5; padding: 10px 8px; text-align: left; font-weight: 600; border-bottom: 2px solid #e0e0e0; }
+        td { padding: 8px; border-bottom: 1px solid #eee; }
+        tr:hover { background: #f9f9f9; }
+
+        .match-high { background: #c8e6c9 !important; }
+        .match-mid { background: #fff9c4 !important; }
+        .match-low { background: #ffcdd2 !important; }
+
+        .loading {
+            display: none; text-align: center; padding: 40px;
+        }
+        .loading.show { display: block; }
+        .spinner {
+            border: 4px solid #e0e0e0; border-top: 4px solid #1a73e8;
+            border-radius: 50%; width: 40px; height: 40px;
+            animation: spin 1s linear infinite; margin: 0 auto 12px;
+        }
+        @keyframes spin { 0% { transform: rotate(0); } 100% { transform: rotate(360deg); } }
+
+        .result-panel { display: none; }
+        .result-panel.show { display: block; }
+
+        #threeViewer {
+            width: 100%; height: 500px; border: 1px solid #e0e0e0;
+            border-radius: 8px; background: #f8f9fa;
+        }
+
+        .alert {
+            padding: 12px 16px; border-radius: 6px; margin-bottom: 16px; font-size: 14px;
+        }
+        .alert-success { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+        .alert-error { background: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
+        .alert-info { background: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; }
+
+        .knowledge-list { max-height: 400px; overflow-y: auto; }
+        .knowledge-item {
+            background: #f5f7fa; border-radius: 8px; padding: 12px 16px; margin-bottom: 8px;
+        }
+        .knowledge-item .name { font-weight: 600; font-size: 14px; }
+        .knowledge-item .details { font-size: 12px; color: #666; margin-top: 4px; }
+
+        .footer { text-align: center; padding: 20px; color: #999; font-size: 12px; }
+
+        input[type="text"] {
+            padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px;
+            font-size: 14px; width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <h1>2D→3D 转换程序</h1>
+            <div class="subtitle">输入二维PID图 + 点料表 → 自动生成三维模型</div>
+        </div>
+        <div class="nav">
+            <button class="nav-btn active" onclick="switchMode('generate')">生成3D</button>
+            <button class="nav-btn" onclick="switchMode('learn')">学习案例</button>
+            <button class="nav-btn" onclick="switchMode('knowledge')">已学知识</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- ============ 生成模式 ============ -->
+        <div id="mode-generate" class="tab-content active">
+            <div class="card">
+                <div class="card-title">
+                    输入文件
+                    <span class="badge">使用阶段</span>
+                </div>
+                <p style="margin-bottom:16px; color:#666; font-size:14px;">
+                    上传二维PID图（DXF）和点料表（xls），系统将基于已学习的案例知识自动生成三维模型。
+                </p>
+                <div class="grid-2">
+                    <div>
+                        <label style="font-weight:600; margin-bottom:8px; display:block;">二维PID图（DXF）</label>
+                        <div class="upload-area" id="gen-dxf-area" onclick="document.getElementById('gen-dxf-input').click()">
+                            <div class="icon">📐</div>
+                            <div class="text">点击或拖拽上传 DXF 文件</div>
+                            <div class="hint">支持 AutoCAD DXF 格式</div>
+                            <input type="file" id="gen-dxf-input" accept=".dxf">
+                        </div>
+                        <div class="file-list" id="gen-dxf-list"></div>
+                    </div>
+                    <div>
+                        <label style="font-weight:600; margin-bottom:8px; display:block;">点料表（xls）</label>
+                        <div class="upload-area" id="gen-bom-area" onclick="document.getElementById('gen-bom-input').click()">
+                            <div class="icon">📊</div>
+                            <div class="text">点击或拖拽上传 xls 文件</div>
+                            <div class="hint">支持 .xls 格式</div>
+                            <input type="file" id="gen-bom-input" accept=".xls,.xlsx">
+                        </div>
+                        <div class="file-list" id="gen-bom-list"></div>
+                    </div>
+                </div>
+                <div style="margin-top:16px;">
+                    <label style="font-weight:600; margin-bottom:8px; display:block;">项目名称</label>
+                    <input type="text" id="gen-project-name" placeholder="如：VMB-800-2进4出">
+                </div>
+                <div style="margin-top:20px; display:flex; gap:12px;">
+                    <button class="btn btn-primary" onclick="generate3D()" id="gen-btn">生成三维模型</button>
+                    <button class="btn" style="background:#e0e0e0;" onclick="parsePreview()">仅预览匹配结果</button>
+                </div>
+            </div>
+
+            <div class="loading" id="gen-loading">
+                <div class="spinner"></div>
+                <p style="color:#666;" id="gen-loading-text">正在生成三维模型...</p>
+            </div>
+
+            <div class="result-panel" id="gen-result">
+                <div class="card">
+                    <div class="card-title">生成结果</div>
+                    <div id="gen-alert"></div>
+                    <div class="stats" id="gen-stats"></div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">三维预览</div>
+                    <div id="threeViewer"></div>
+                    <div style="margin-top:12px; display:flex; gap:12px; flex-wrap:wrap;">
+                        <button class="btn btn-success" onclick="downloadFile('assembly.stp')">下载 STEP 模型</button>
+                        <button class="btn btn-success" onclick="downloadFile('assembly.glb')">下载 GLB 模型</button>
+                        <button class="btn btn-success" onclick="downloadFile('assembly.stl')">下载 STL 模型</button>
+                        <button class="btn btn-success" onclick="downloadFile('assembly.obj')">下载 OBJ 模型</button>
+                        <button class="btn btn-success" onclick="downloadFile('assembly.3mf')">下载 3MF 模型</button>
+                        <button class="btn btn-success" onclick="downloadFile('match_result.json')">下载匹配结果</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">组件匹配详情</div>
+                    <table id="gen-match-table">
+                        <thead>
+                            <tr>
+                                <th>PID编号</th>
+                                <th>类型</th>
+                                <th>管径</th>
+                                <th>位号</th>
+                                <th>匹配物料</th>
+                                <th>品牌</th>
+                                <th>置信度</th>
+                                <th>隐形配件</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ 学习模式 ============ -->
+        <div id="mode-learn" class="tab-content">
+            <div class="card">
+                <div class="card-title">
+                    学习案例
+                    <span class="badge">学习阶段</span>
+                </div>
+                <p style="margin-bottom:16px; color:#666; font-size:14px;">
+                    上传完整案例（2D图 + 点料表 + 三维参考文件），系统将自动学习映射规则和装配知识。<br>
+                    之后在「生成3D」中只需上传2D和点料表即可。
+                </p>
+
+                <div style="margin-bottom:16px;">
+                    <label style="font-weight:600; margin-bottom:8px; display:block;">案例名称</label>
+                    <input type="text" id="learn-case-name" placeholder="如：海神VMB-700">
+                </div>
+
+                <div class="grid-2">
+                    <div>
+                        <label style="font-weight:600; margin-bottom:8px; display:block;">二维PID图（DXF）</label>
+                        <div class="upload-area" id="learn-dxf-area" onclick="document.getElementById('learn-dxf-input').click()">
+                            <div class="icon">📐</div>
+                            <div class="text">上传 DXF</div>
+                            <input type="file" id="learn-dxf-input" accept=".dxf">
+                        </div>
+                        <div class="file-list" id="learn-dxf-list"></div>
+                    </div>
+                    <div>
+                        <label style="font-weight:600; margin-bottom:8px; display:block;">点料表（xls）</label>
+                        <div class="upload-area" id="learn-bom-area" onclick="document.getElementById('learn-bom-input').click()">
+                            <div class="icon">📊</div>
+                            <div class="text">上传 xls</div>
+                            <input type="file" id="learn-bom-input" accept=".xls,.xlsx">
+                        </div>
+                        <div class="file-list" id="learn-bom-list"></div>
+                    </div>
+                </div>
+
+                <div class="grid-2" style="margin-top:16px;">
+                    <div>
+                        <label style="font-weight:600; margin-bottom:8px; display:block;">三维参考文件（本案例的3D装配体）</label>
+                        <div class="upload-area" id="learn-3d-area" onclick="document.getElementById('learn-3d-input').click()">
+                            <div class="icon">📦</div>
+                            <div class="text">上传 3D 文件</div>
+                            <div class="hint">.stp/.step/.ipt/.iam 文件</div>
+                            <input type="file" id="learn-3d-input" accept=".ipt,.iam,.stp,.step,.stl" multiple>
+                        </div>
+                        <div class="file-list" id="learn-3d-list"></div>
+                    </div>
+                    <div>
+                        <label style="font-weight:600; margin-bottom:8px; display:block;">三维器件库（通用零件库，可跨项目复用）</label>
+                        <div class="upload-area" id="learn-lib-area" onclick="document.getElementById('learn-lib-input').click()">
+                            <div class="icon">🗂️</div>
+                            <div class="text">上传器件库 3D 文件</div>
+                            <div class="hint">.stp/.step 文件，可多选</div>
+                            <input type="file" id="learn-lib-input" accept=".stp,.step,.stl,.ipt" multiple>
+                        </div>
+                        <div class="file-list" id="learn-lib-list"></div>
+                    </div>
+                </div>
+
+                <div style="margin-top:20px;">
+                    <button class="btn btn-primary" onclick="learnCase()" id="learn-btn">开始学习</button>
+                </div>
+            </div>
+
+            <div class="loading" id="learn-loading">
+                <div class="spinner"></div>
+                <p style="color:#666;" id="learn-loading-text">正在学习案例...</p>
+            </div>
+
+            <div class="result-panel" id="learn-result">
+                <div class="card">
+                    <div class="card-title">学习结果</div>
+                    <div id="learn-alert"></div>
+                    <div class="stats" id="learn-stats"></div>
+                </div>
+                <div class="card">
+                    <div class="card-title">提取的映射规则</div>
+                    <table id="learn-mapping-table">
+                        <thead>
+                            <tr><th>PID类型</th><th>管径</th><th>BOM物料</th><th>品牌</th><th>3D零件</th><th>置信度</th></tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ 知识库 ============ -->
+        <div id="mode-knowledge" class="tab-content">
+            <div class="card">
+                <div class="card-title">已学知识库</div>
+                <button class="btn btn-primary" onclick="loadKnowledge()" style="margin-bottom:16px;">刷新</button>
+                <div id="knowledge-content">
+                    <p style="color:#999;">点击刷新查看已学习的知识</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        2D→3D 转换程序 | 学习阶段输入：2D+点料表+3D参考 | 使用阶段输入：2D+点料表 → 输出：3D
+    </div>
+
+    <!-- Three.js for 3D preview -->
+    <script src="/static/js/three.min.js"></script>
+    <script src="/static/js/GLTFLoader.js"></script>
+    <script src="/static/js/OrbitControls.js"></script>
+
+    <script>
+        // ============ 模式切换 ============
+        function switchMode(mode) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.getElementById('mode-' + mode).classList.add('active');
+            document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            if (mode === 'knowledge') loadKnowledge();
+        }
+
+        // ============ 文件上传 ============
+        function setupUpload(areaId, inputId, listId) {
+            const area = document.getElementById(areaId);
+            const input = document.getElementById(inputId);
+            const list = document.getElementById(listId);
+
+            input.addEventListener('change', function() {
+                list.innerHTML = '';
+                for (const file of this.files) {
+                    const item = document.createElement('div');
+                    item.className = 'file-item';
+                    item.innerHTML = `📄 ${file.name} <span class="remove" onclick="this.parentElement.remove(); document.getElementById('${inputId}').value=''">✕</span>`;
+                    list.appendChild(item);
+                }
+            });
+
+            area.addEventListener('dragover', e => { e.preventDefault(); area.classList.add('dragover'); });
+            area.addEventListener('dragleave', e => { area.classList.remove('dragover'); });
+            area.addEventListener('drop', e => {
+                e.preventDefault(); area.classList.remove('dragover');
+                input.files = e.dataTransfer.files;
+                input.dispatchEvent(new Event('change'));
+            });
+        }
+
+        setupUpload('gen-dxf-area', 'gen-dxf-input', 'gen-dxf-list');
+        setupUpload('gen-bom-area', 'gen-bom-input', 'gen-bom-list');
+        setupUpload('learn-dxf-area', 'learn-dxf-input', 'learn-dxf-list');
+        setupUpload('learn-bom-area', 'learn-bom-input', 'learn-bom-list');
+        setupUpload('learn-3d-area', 'learn-3d-input', 'learn-3d-list');
+        setupUpload('learn-lib-area', 'learn-lib-input', 'learn-lib-list');
+
+        // ============ 生成3D ============
+        let currentAssemblyId = null;
+
+        async function generate3D() {
+            const dxfFile = document.getElementById('gen-dxf-input').files[0];
+            const bomFile = document.getElementById('gen-bom-input').files[0];
+            const projectName = document.getElementById('gen-project-name').value || 'unnamed';
+
+            if (!dxfFile || !bomFile) {
+                alert('请上传DXF和点料表文件');
+                return;
+            }
+
+            document.getElementById('gen-loading').classList.add('show');
+            document.getElementById('gen-result').classList.remove('show');
+            document.getElementById('gen-btn').disabled = true;
+
+            const formData = new FormData();
+            formData.append('dxf_file', dxfFile);
+            formData.append('bom_file', bomFile);
+            formData.append('project_name', projectName);
+
+            document.getElementById('gen-loading-text').textContent = '正在解析DXF和点料表...';
+
+            try {
+                // 使用AbortController设置5分钟超时（加载STEP文件可能较慢）
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 300000);
+
+                const resp = await fetch('/api/generate', {
+                    method: 'POST', body: formData, signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+
+                // 先检查响应类型
+                const contentType = resp.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    const text = await resp.text();
+                    console.error('Non-JSON response:', text.substring(0, 200));
+                    throw new Error('服务器返回了非JSON响应（可能加载STEP文件超时），请重试');
+                }
+
+                const data = await resp.json();
+
+                if (data.error) {
+                    alert('错误: ' + data.error);
+                } else {
+                    currentAssemblyId = data.assembly_id;
+                    showGenResult(data);
+                }
+            } catch (e) {
+                alert('请求失败: ' + e.message);
+            } finally {
+                document.getElementById('gen-loading').classList.remove('show');
+                document.getElementById('gen-btn').disabled = false;
+            }
+        }
+
+        function showGenResult(data) {
+            document.getElementById('gen-result').classList.add('show');
+
+            const alert = document.getElementById('gen-alert');
+            const knowledgeUsed = data.knowledge_used || 0;
+            alert.className = 'alert alert-success';
+            alert.innerHTML = `✅ 生成成功！${knowledgeUsed > 0 ? `使用了 ${knowledgeUsed} 条已学知识。` : '未使用已学知识（建议先学习案例）。'}`;
+
+            // 统计
+            const stats = data.match_summary || {};
+            const aStats = data.assembly_stats || {};
+            document.getElementById('gen-stats').innerHTML = `
+                <div class="stat-card"><div class="value">${stats.total_pid_components || 0}</div><div class="label">PID组件</div></div>
+                <div class="stat-card"><div class="value">${stats.matched_components || 0}</div><div class="label">已匹配</div></div>
+                <div class="stat-card"><div class="value">${stats.total_pipes || 0}</div><div class="label">管路段</div></div>
+                <div class="stat-card"><div class="value">${aStats.total_parts || 0}</div><div class="label">3D零件</div></div>
+                <div class="stat-card"><div class="value">${aStats.valve_count || 0}</div><div class="label">阀门</div></div>
+                <div class="stat-card"><div class="value">${aStats.total_faces || 0}</div><div class="label">面数</div></div>
+            `;
+
+            // 加载3D预览
+            loadThreeViewer(data.assembly_id);
+
+            // 加载匹配表
+            loadAssemblyDetail(data.assembly_id);
+        }
+
+        // ============ Three.js 预览 ============
+        let threeScene, threeCamera, threeRenderer, threeControls;
+
+        function loadThreeViewer(assemblyId) {
+            const container = document.getElementById('threeViewer');
+            container.innerHTML = '';
+
+            threeScene = new THREE.Scene();
+            threeScene.background = new THREE.Color(0xf8f9fa);
+
+            threeCamera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 1, 5000);
+            threeCamera.position.set(300, 200, 300);
+
+            threeRenderer = new THREE.WebGLRenderer({ antialias: true });
+            threeRenderer.setSize(container.clientWidth, container.clientHeight);
+            container.appendChild(threeRenderer.domElement);
+
+            threeControls = new THREE.OrbitControls(threeCamera, threeRenderer.domElement);
+
+            // 光照
+            threeScene.add(new THREE.AmbientLight(0xffffff, 0.6));
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(200, 300, 200);
+            threeScene.add(dirLight);
+
+            // 网格
+            const grid = new THREE.GridHelper(500, 20, 0xcccccc, 0xdddddd);
+            threeScene.add(grid);
+
+            // 加载GLB
+            const loader = new THREE.GLTFLoader();
+            const url = `/api/download/${assemblyId}/assembly.glb`;
+            loader.load(url, function(gltf) {
+                threeScene.add(gltf.scene);
+                // 自动居中
+                const box = new THREE.Box3().setFromObject(gltf.scene);
+                const center = box.getCenter(new THREE.Vector3());
+                const size = box.getSize(new THREE.Vector3());
+                gltf.scene.position.sub(center);
+                // 调整相机
+                const maxDim = Math.max(size.x, size.y, size.z);
+                threeCamera.position.set(maxDim * 1.5, maxDim, maxDim * 1.5);
+                threeControls.target.set(0, 0, 0);
+                threeControls.update();
+            }, undefined, function(error) {
+                console.error('GLB加载失败', error);
+                container.innerHTML = '<p style="text-align:center;padding:40px;color:#999;">3D模型加载失败，请检查GLB文件</p>';
+            });
+
+            animate();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            if (threeControls) threeControls.update();
+            if (threeRenderer) threeRenderer.render(threeScene, threeCamera);
+        }
+
+        // ============ 下载 ============
+        function downloadFile(filename) {
+            if (!currentAssemblyId) return;
+            window.location.href = `/api/download/${currentAssemblyId}/${filename}`;
+        }
+
+        // ============ 加载匹配详情 ============
+        async function loadAssemblyDetail(assemblyId) {
+            try {
+                const resp = await fetch(`/api/assembly/${assemblyId}`);
+                const data = await resp.json();
+                const components = data.match_result?.components || [];
+
+                const tbody = document.querySelector('#gen-match-table tbody');
+                tbody.innerHTML = '';
+                for (const comp of components) {
+                    const mat = comp.matched_material;
+                    const conf = comp.match_confidence;
+                    const confClass = conf > 0.7 ? 'match-high' : (conf > 0.4 ? 'match-mid' : 'match-low');
+                    const hidden = comp.hidden_items?.map(h => h.name).join(', ') || '';
+
+                    tbody.innerHTML += `
+                        <tr>
+                            <td>${comp.pid_node_id}</td>
+                            <td>${comp.pid_type}</td>
+                            <td>${comp.pid_pipe_size || '-'}</td>
+                            <td>${comp.pid_tag || '-'}</td>
+                            <td>${mat?.name || '<span style="color:#f44336">未匹配</span>'}</td>
+                            <td>${mat?.supplier || '-'}</td>
+                            <td class="${confClass}">${(conf * 100).toFixed(0)}%</td>
+                            <td style="font-size:12px;">${hidden}</td>
+                        </tr>`;
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        // ============ 仅预览匹配 ============
+        async function parsePreview() {
+            const dxfFile = document.getElementById('gen-dxf-input').files[0];
+            const bomFile = document.getElementById('gen-bom-input').files[0];
+            if (!dxfFile || !bomFile) { alert('请上传文件'); return; }
+
+            document.getElementById('gen-loading').classList.add('show');
+            const formData = new FormData();
+            formData.append('dxf_file', dxfFile);
+            formData.append('bom_file', bomFile);
+
+            try {
+                const resp = await fetch('/api/parse/preview', { method: 'POST', body: formData });
+                const data = await resp.json();
+                if (data.error) { alert(data.error); return; }
+
+                const stats = data.match_result?.summary || {};
+                document.getElementById('gen-stats').innerHTML = `
+                    <div class="stat-card"><div class="value">${stats.total_pid_components || 0}</div><div class="label">PID组件</div></div>
+                    <div class="stat-card"><div class="value">${stats.matched_components || 0}</div><div class="label">已匹配</div></div>
+                    <div class="stat-card"><div class="value">${stats.total_pipes || 0}</div><div class="label">管路段</div></div>
+                    <div class="stat-card"><div class="value">${stats.total_bom_materials || 0}</div><div class="label">BOM物料</div></div>
+                `;
+                document.getElementById('gen-result').classList.add('show');
+
+                // 填充匹配表
+                const components = data.match_result?.components || [];
+                const tbody = document.querySelector('#gen-match-table tbody');
+                tbody.innerHTML = '';
+                for (const comp of components) {
+                    const mat = comp.matched_material;
+                    const conf = comp.match_confidence;
+                    const confClass = conf > 0.7 ? 'match-high' : (conf > 0.4 ? 'match-mid' : 'match-low');
+                    tbody.innerHTML += `
+                        <tr>
+                            <td>${comp.pid_node_id}</td>
+                            <td>${comp.pid_type}</td>
+                            <td>${comp.pid_pipe_size || '-'}</td>
+                            <td>${comp.pid_tag || '-'}</td>
+                            <td>${mat?.name || '<span style="color:#f44336">未匹配</span>'}</td>
+                            <td>${mat?.supplier || '-'}</td>
+                            <td class="${confClass}">${(conf * 100).toFixed(0)}%</td>
+                            <td style="font-size:12px;">${comp.hidden_items?.map(h => h.name).join(',') || ''}</td>
+                        </tr>`;
+                }
+            } catch (e) {
+                alert('请求失败: ' + e.message);
+            } finally {
+                document.getElementById('gen-loading').classList.remove('show');
+            }
+        }
+
+        // ============ 学习 ============
+        async function learnCase() {
+            const dxfFile = document.getElementById('learn-dxf-input').files[0];
+            const bomFile = document.getElementById('learn-bom-input').files[0];
+            const caseName = document.getElementById('learn-case-name').value || `case_${Date.now()}`;
+            const ref3dFiles = document.getElementById('learn-3d-input').files;
+            const libFiles = document.getElementById('learn-lib-input').files;
+
+            if (!dxfFile || !bomFile) { alert('请上传DXF和点料表'); return; }
+
+            document.getElementById('learn-loading').classList.add('show');
+            document.getElementById('learn-result').classList.remove('show');
+            document.getElementById('learn-btn').disabled = true;
+
+            const formData = new FormData();
+            formData.append('dxf_file', dxfFile);
+            formData.append('bom_file', bomFile);
+            formData.append('case_name', caseName);
+            for (const f of ref3dFiles) formData.append('ref_3d_files', f);
+            for (const f of libFiles) formData.append('library_files', f);
+
+            try {
+                const resp = await fetch('/api/learn', { method: 'POST', body: formData });
+                const data = await resp.json();
+                if (data.error) { alert(data.error); return; }
+                showLearnResult(data);
+            } catch (e) {
+                alert('请求失败: ' + e.message);
+            } finally {
+                document.getElementById('learn-loading').classList.remove('show');
+                document.getElementById('learn-btn').disabled = false;
+            }
+        }
+
+        function showLearnResult(data) {
+            document.getElementById('learn-result').classList.add('show');
+            const k = data.knowledge || {};
+            document.getElementById('learn-alert').className = 'alert alert-success';
+            document.getElementById('learn-alert').innerHTML = `✅ ${data.message || '学习完成'}`;
+
+            document.getElementById('learn-stats').innerHTML = `
+                <div class="stat-card"><div class="value">${k.part_mappings?.length || 0}</div><div class="label">映射规则</div></div>
+                <div class="stat-card"><div class="value">${k.topology_rules?.length || 0}</div><div class="label">拓扑规则</div></div>
+                <div class="stat-card"><div class="value">${k.assembly_rules?.length || 0}</div><div class="label">装配规则</div></div>
+                <div class="stat-card"><div class="value">${k.hidden_param_rules?.length || 0}</div><div class="label">隐形参数</div></div>
+            `;
+
+            const mappings = k.part_mappings || [];
+            const tbody = document.querySelector('#learn-mapping-table tbody');
+            tbody.innerHTML = '';
+            for (const m of mappings) {
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${m.pid_type}</td>
+                        <td>${m.pid_pipe_size || '-'}</td>
+                        <td>${m.bom_name_pattern}</td>
+                        <td>${m.bom_supplier || '-'}</td>
+                        <td>${m.library_part || '-'}</td>
+                        <td>${(m.match_confidence * 100).toFixed(0)}%</td>
+                    </tr>`;
+            }
+        }
+
+        // ============ 知识库 ============
+        async function loadKnowledge() {
+            try {
+                const resp = await fetch('/api/knowledge');
+                const data = await resp.json();
+                const content = document.getElementById('knowledge-content');
+
+                if (data.count === 0) {
+                    content.innerHTML = '<div class="alert alert-info">尚未学习任何案例。请先在「学习案例」中上传完整案例数据。</div>';
+                    return;
+                }
+
+                let html = `<p style="margin-bottom:12px;">已学习 <b>${data.count}</b> 个案例</p>`;
+                html += '<div class="knowledge-list">';
+                for (const k of data.knowledge) {
+                    html += `
+                        <div class="knowledge-item">
+                            <div class="name">${k.case_name}</div>
+                            <div class="details">
+                                映射规则: ${k.part_mappings?.length || 0} |
+                                拓扑规则: ${k.topology_rules?.length || 0} |
+                                装配规则: ${k.assembly_rules?.length || 0} |
+                                隐形参数: ${k.hidden_param_rules?.length || 0}
+                            </div>
+                        </div>`;
+                }
+                html += '</div>';
+                content.innerHTML = html;
+            } catch (e) {
+                alert('加载失败: ' + e.message);
+            }
+        }
+    </script>
+</body>
+</html>

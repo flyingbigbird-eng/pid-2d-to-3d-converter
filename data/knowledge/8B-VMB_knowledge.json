@@ -1,0 +1,215 @@
+{
+  "case_name": "8B-VMB",
+  "part_mappings": [
+    {
+      "pid_type": "AV",
+      "pid_pipe_size": "1/2\"",
+      "bom_name_pattern": "气动隔膜阀1/2\"",
+      "bom_supplier": "CKD",
+      "library_part": "PLMV-K08.ipt",
+      "library_part_path": "",
+      "match_confidence": 0.75,
+      "occurrence_count": 2
+    },
+    {
+      "pid_type": "MV",
+      "pid_pipe_size": "1\"",
+      "bom_name_pattern": "手动隔膜阀 1\"",
+      "bom_supplier": "Entegris",
+      "library_part": "",
+      "library_part_path": "",
+      "match_confidence": 0.75,
+      "occurrence_count": 1
+    },
+    {
+      "pid_type": "MV",
+      "pid_pipe_size": "1/4\"",
+      "bom_name_pattern": "手动隔膜阀1/4\"",
+      "bom_supplier": "CKD",
+      "library_part": "",
+      "library_part_path": "",
+      "match_confidence": 0.75,
+      "occurrence_count": 2
+    },
+    {
+      "pid_type": "MV",
+      "pid_pipe_size": "1/2\"",
+      "bom_name_pattern": "手动球阀1/2\"",
+      "bom_supplier": "Superlok",
+      "library_part": "",
+      "library_part_path": "",
+      "match_confidence": 0.75,
+      "occurrence_count": 2
+    },
+    {
+      "pid_type": "AV",
+      "pid_pipe_size": "1/2\"",
+      "bom_name_pattern": "气动隔膜阀1/2\"（无金属）",
+      "bom_supplier": "CKD",
+      "library_part": "PLMV-K08.ipt",
+      "library_part_path": "",
+      "match_confidence": 0.75,
+      "occurrence_count": 2
+    },
+    {
+      "pid_type": "MV",
+      "pid_pipe_size": "1/4\"",
+      "bom_name_pattern": "低压手动隔膜阀1/4\"",
+      "bom_supplier": "kitz",
+      "library_part": "",
+      "library_part_path": "",
+      "match_confidence": 0.75,
+      "occurrence_count": 1
+    },
+    {
+      "pid_type": "MV",
+      "pid_pipe_size": "1/2\"",
+      "bom_name_pattern": "手动隔膜阀1/2\"",
+      "bom_supplier": "CKD",
+      "library_part": "PLMV-K08.ipt",
+      "library_part_path": "",
+      "match_confidence": 0.75,
+      "occurrence_count": 1
+    },
+    {
+      "pid_type": "MV",
+      "pid_pipe_size": "1/2\"",
+      "bom_name_pattern": "低压手动隔膜阀1/2\"",
+      "bom_supplier": "kitz",
+      "library_part": "",
+      "library_part_path": "",
+      "match_confidence": 0.75,
+      "occurrence_count": 1
+    },
+    {
+      "pid_type": "AV",
+      "pid_pipe_size": "1/2\"",
+      "bom_name_pattern": "气动隔膜阀 1/2\"",
+      "bom_supplier": "Entegris",
+      "library_part": "",
+      "library_part_path": "",
+      "match_confidence": 0.75,
+      "occurrence_count": 2
+    },
+    {
+      "pid_type": "MV",
+      "pid_pipe_size": "1/4\"",
+      "bom_name_pattern": "手动隔膜阀 1/4\"",
+      "bom_supplier": "Entegris",
+      "library_part": "",
+      "library_part_path": "",
+      "match_confidence": 0.75,
+      "occurrence_count": 1
+    },
+    {
+      "pid_type": "MV",
+      "pid_pipe_size": "1/2\"",
+      "bom_name_pattern": "手动隔膜阀1/2\"（无金属）",
+      "bom_supplier": "CKD",
+      "library_part": "PLMV-K08.ipt",
+      "library_part_path": "",
+      "match_confidence": 0.75,
+      "occurrence_count": 1
+    },
+    {
+      "pid_type": "DBV",
+      "pid_pipe_size": "1/2\"",
+      "bom_name_pattern": "手动隔膜阀 1/2\"",
+      "bom_supplier": "Entegris",
+      "library_part": "",
+      "library_part_path": "",
+      "match_confidence": 0.75,
+      "occurrence_count": 1
+    }
+  ],
+  "topology_rules": [
+    {
+      "medium": "Unknown",
+      "pipe_size": "",
+      "size_mm": 0.0,
+      "typical_length_mm": 0.55,
+      "direction": "vertical",
+      "branch_count": 0
+    }
+  ],
+  "assembly_rules": [
+    {
+      "component_type": "AV",
+      "spacing_mm": 1.31,
+      "orientation": "horizontal",
+      "base_offset": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "component_type": "MV",
+      "spacing_mm": 1.17,
+      "orientation": "horizontal",
+      "base_offset": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "component_type": "DBV",
+      "spacing_mm": 100.0,
+      "orientation": "horizontal",
+      "base_offset": [
+        0,
+        0,
+        0
+      ]
+    }
+  ],
+  "hidden_param_rules": [
+    {
+      "trigger_category": "valve",
+      "trigger_size": "1/2\"",
+      "hidden_name": "垫片1/2\"",
+      "hidden_category": "fitting",
+      "hidden_qty": 2,
+      "hidden_material": "PTFE"
+    },
+    {
+      "trigger_category": "valve",
+      "trigger_size": "1\"",
+      "hidden_name": "垫片1\"",
+      "hidden_category": "fitting",
+      "hidden_qty": 2,
+      "hidden_material": "PTFE"
+    },
+    {
+      "trigger_category": "valve",
+      "trigger_size": "1/4\"",
+      "hidden_name": "垫片1/4\"",
+      "hidden_category": "fitting",
+      "hidden_qty": 2,
+      "hidden_material": "PTFE"
+    }
+  ],
+  "pid_summary": {
+    "component_count": 23,
+    "pipe_count": 407,
+    "extents": [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "bom_summary": {
+    "total_materials": 1063,
+    "category_stats": {
+      "other": 304,
+      "valve": 121,
+      "fitting": 358,
+      "pipe": 32,
+      "sensor": 40,
+      "accessory": 11,
+      "shell": 197
+    }
+  }
+}

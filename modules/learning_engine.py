@@ -1,0 +1,488 @@
+"""
+学习引擎
+==================
+学习阶段：输入 2D(DXF) + 点料表(xls) + 三维参考(STP/零件库)，提取映射规则和装配知识
+使用阶段：输入 2D(DXF) + 点料表(xls)，利用已学规则生成三维模型
+
+核心思路：
+  - 用已有案例（如海神VMB）学习：PID组件 -> BOM物料 -> 三维零件 的映射关系
+  - 学习管路拓扑规则（管径、走向、间距、方向）
+  - 学习隐形参数规则（垫片、螺栓等隐含配件）
+  - 新项目只需 2D + 点料表，按学到的规则自动匹配和生成
+"""
+import json
+import os
+import math
+import numpy as np
+from dataclasses import dataclass, field
+from typing import Optional
+from .dxf_parser import PIDDiagram, parse_dxf, ComponentNode, PipeSegment
+from .bom_parser import BOMDocument, parse_bom, Material
+from .matcher import MatchResult, match_components, MatchedComponent
+
+
+@dataclass
+class PartMapping:
+    """单个零件的映射规则（从学习中提取）"""
+    pid_type: str           # PID类型代码 AV/MV/DBV
+    pid_pipe_size: str      # 管径
+    bom_name_pattern: str   # BOM物料名称模式
+    bom_supplier: str       # 品牌供应商
+    library_part: str       # 对应的三维零件文件
+    library_part_path: str  # 零件文件路径
+    match_confidence: float = 0.0
+    occurrence_count: int = 1  # 在历史案例中出现次数
+
+    def to_dict(self) -> dict:
+        return {
+            "pid_type": self.pid_type,
+            "pid_pipe_size": self.pid_pipe_size,
+            "bom_name_pattern": self.bom_name_pattern,
+            "bom_supplier": self.bom_supplier,
+            "library_part": self.library_part,
+            "library_part_path": self.library_part_path,
+            "match_confidence": round(self.match_confidence, 2),
+            "occurrence_count": self.occurrence_count,
+        }
+
+
+@dataclass
+class TopologyRule:
+    """管路拓扑规则"""
+    medium: str              # 介质
+    pipe_size: str           # 管径
+    size_mm: float            # 毫米
+    typical_length_mm: float = 0.0  # 典型长度
+    direction: str = "horizontal"   # 走向
+    branch_count: int = 0           # 分支数
+
+    def to_dict(self) -> dict:
+        return {
+            "medium": self.medium,
+            "pipe_size": self.pipe_size,
+            "size_mm": self.size_mm,
+            "typical_length_mm": round(self.typical_length_mm, 2),
+            "direction": self.direction,
+            "branch_count": self.branch_count,
+        }
+
+
+@dataclass
+class AssemblyRule:
+    """装配规则 - 零件之间的空间关系"""
+    component_type: str      # 组件类型
+    spacing_mm: float        # 间距
+    orientation: str         # 方向
+    base_offset: tuple = (0, 0, 0)  # 基础偏移
+
+    def to_dict(self) -> dict:
+        return {
+            "component_type": self.component_type,
+            "spacing_mm": round(self.spacing_mm, 2),
+            "orientation": self.orientation,
+            "base_offset": [round(v, 2) for v in self.base_offset],
+        }
+
+
+@dataclass
+class HiddenParamRule:
+    """隐形参数规则"""
+    trigger_category: str   # 触发类别 (valve/fitting等)
+    trigger_size: str       # 触发管径
+    hidden_name: str        # 隐形配件名称
+    hidden_category: str
+    hidden_qty: int
+    hidden_material: str = ""
+
+    def to_dict(self) -> dict:
+        return {
+            "trigger_category": self.trigger_category,
+            "trigger_size": self.trigger_size,
+            "hidden_name": self.hidden_name,
+            "hidden_category": self.hidden_category,
+            "hidden_qty": self.hidden_qty,
+            "hidden_material": self.hidden_material,
+        }
+
+
+@dataclass
+class LearnedKnowledge:
+    """从历史案例中学到的全部知识"""
+    case_name: str = ""
+    part_mappings: list = field(default_factory=list)     # PartMapping
+    topology_rules: list = field(default_factory=list)    # TopologyRule
+    assembly_rules: list = field(default_factory=list)   # AssemblyRule
+    hidden_param_rules: list = field(default_factory=list)  # HiddenParamRule
+    pid_summary: dict = field(default_factory=dict)
+    bom_summary: dict = field(default_factory=dict)
+
+    def to_dict(self) -> dict:
+        return {
+            "case_name": self.case_name,
+            "part_mappings": [p.to_dict() for p in self.part_mappings],
+            "topology_rules": [t.to_dict() for t in self.topology_rules],
+            "assembly_rules": [a.to_dict() for a in self.assembly_rules],
+            "hidden_param_rules": [h.to_dict() for h in self.hidden_param_rules],
+            "pid_summary": self.pid_summary,
+            "bom_summary": self.bom_summary,
+        }
+
+
+def learn_from_case(
+    case_name: str,
+    dxf_path: str = "",
+    bom_path: str = "",
+    ref_3d_dir: str = "",
+    output_dir: str = "",
+) -> LearnedKnowledge:
+    """
+    学习阶段：从一个完整案例中提取知识
+    输入：2D(DXF) + 点料表(xls) + 三维参考(目录)
+    输出：LearnedKnowledge 保存到 output_dir
+
+    dxf_path 可选：如果没有dxf（只有dwg），仍可从bom+stp学习器件库映射
+    """
+    knowledge = LearnedKnowledge(case_name=case_name)
+
+    # 1. 解析2D（如果有dxf）
+    pid = None
+    if dxf_path and os.path.exists(dxf_path):
+        try:
+            pid = parse_dxf(dxf_path)
+        except Exception as e:
+            print(f"Warning: DXF parsing failed: {e}")
+
+    # 2. 解析点料表
+    bom = parse_bom(bom_path) if bom_path and os.path.exists(bom_path) else BOMDocument()
+
+    # 3. 匹配组件（如果有pid）
+    result = None
+    if pid and bom.all_materials:
+        result = match_components(pid, bom)
+
+    # 4. 扫描三维参考目录，建立零件库索引
+    library_index = _scan_3d_library(ref_3d_dir) if ref_3d_dir else {"parts": [], "assemblies": [], "step_files": [], "dir": ""}
+
+    # 5. 提取映射规则
+    knowledge.part_mappings = _extract_part_mappings(result, library_index) if result else []
+    knowledge.topology_rules = _extract_topology_rules(pid) if pid else []
+    knowledge.assembly_rules = _extract_assembly_rules(pid, result) if (pid and result) else []
+    knowledge.hidden_param_rules = _extract_hidden_rules(result) if result else []
+
+    knowledge.pid_summary = {
+        "component_count": len(pid.components) if pid else 0,
+        "pipe_count": len(pid.pipes) if pid else 0,
+        "extents": pid.extents if pid else (0, 0, 0, 0),
+    }
+    knowledge.bom_summary = {
+        "total_materials": len(bom.all_materials),
+        "category_stats": {},
+    }
+    for mat in bom.all_materials:
+        cat = mat.category or "other"
+        if cat not in knowledge.bom_summary["category_stats"]:
+            knowledge.bom_summary["category_stats"][cat] = 0
+        knowledge.bom_summary["category_stats"][cat] += 1
+
+    # 6. 保存
+    os.makedirs(output_dir, exist_ok=True)
+    out_path = os.path.join(output_dir, f"{case_name}_knowledge.json")
+    with open(out_path, 'w', encoding='utf-8') as f:
+        json.dump(knowledge.to_dict(), f, ensure_ascii=False, indent=2)
+
+    # 同时保存原始匹配结果作为案例
+    case_data = {
+        "name": case_name,
+        "pid": pid.to_dict() if pid else {},
+        "bom": bom.to_dict(),
+        "match_result": result.to_dict() if result else {},
+        "library_index": library_index,
+    }
+    case_path = os.path.join(output_dir, f"{case_name}_case.json")
+    with open(case_path, 'w', encoding='utf-8') as f:
+        json.dump(case_data, f, ensure_ascii=False, indent=2)
+
+    return knowledge
+
+
+def _scan_3d_library(ref_3d_dir: str) -> dict:
+    """扫描三维参考目录，建立零件索引"""
+    index = {
+        "parts": [],  # 零件文件列表
+        "assemblies": [],  # 装配文件列表
+        "step_files": [],  # STEP文件列表
+        "dir": ref_3d_dir,
+    }
+
+    if not os.path.exists(ref_3d_dir):
+        return index
+
+    for root, dirs, files in os.walk(ref_3d_dir):
+        for fname in files:
+            ext = os.path.splitext(fname)[1].lower()
+            fpath = os.path.join(root, fname)
+            rel_path = os.path.relpath(fpath, ref_3d_dir)
+
+            if ext == '.ipt':
+                index["parts"].append({
+                    "name": fname,
+                    "path": rel_path,
+                    "full_path": fpath,
+                })
+            elif ext == '.iam':
+                index["assemblies"].append({
+                    "name": fname,
+                    "path": rel_path,
+                    "full_path": fpath,
+                })
+            elif ext in ('.stp', '.step'):
+                index["step_files"].append({
+                    "name": fname,
+                    "path": rel_path,
+                    "full_path": fpath,
+                })
+
+    return index
+
+
+def _extract_part_mappings(result: MatchResult, library_index: dict) -> list:
+    """从匹配结果中提取零件映射规则"""
+    mappings = []
+    seen = set()
+
+    # 建零件名到路径的索引
+    part_name_to_path = {}
+    for p in library_index.get("parts", []):
+        part_name_to_path[p["name"]] = p["full_path"]
+
+    for comp in result.components:
+        if not comp.matched_material:
+            continue
+
+        key = f"{comp.pid_type}_{comp.pid_pipe_size}_{comp.matched_material.name}"
+        if key in seen:
+            # 增加出现次数
+            for m in mappings:
+                if f"{m.pid_type}_{m.pid_pipe_size}_{m.bom_name_pattern}" == key:
+                    m.occurrence_count += 1
+            continue
+        seen.add(key)
+
+        library_part = comp.library_part
+        library_part_path = ""
+        if library_part and library_part in part_name_to_path:
+            library_part_path = part_name_to_path[library_part]
+        elif library_part:
+            # 模糊匹配
+            for pname, ppath in part_name_to_path.items():
+                if library_part.lower() in pname.lower() or pname.lower() in library_part.lower():
+                    library_part_path = ppath
+                    break
+
+        mapping = PartMapping(
+            pid_type=comp.pid_type,
+            pid_pipe_size=comp.pid_pipe_size,
+            bom_name_pattern=comp.matched_material.name,
+            bom_supplier=comp.matched_material.supplier,
+            library_part=library_part,
+            library_part_path=library_part_path,
+            match_confidence=comp.match_confidence,
+        )
+        mappings.append(mapping)
+
+    return mappings
+
+
+def _extract_topology_rules(pid: PIDDiagram) -> list:
+    """提取管路拓扑规则"""
+    rules = []
+    seen = set()
+
+    for pipe in pid.pipes:
+        key = f"{pipe.medium}_{pipe.size}"
+        if key in seen:
+            continue
+        seen.add(key)
+
+        # 计算典型长度
+        length = 0.0
+        for i in range(len(pipe.points) - 1):
+            dx = pipe.points[i + 1][0] - pipe.points[i][0]
+            dy = pipe.points[i + 1][1] - pipe.points[i][1]
+            length += math.sqrt(dx * dx + dy * dy)
+
+        # 判断走向
+        direction = "horizontal"
+        if len(pipe.points) >= 2:
+            dx = abs(pipe.points[-1][0] - pipe.points[0][0])
+            dy = abs(pipe.points[-1][1] - pipe.points[0][1])
+            if dx > dy * 3:
+                direction = "horizontal"
+            elif dy > dx * 3:
+                direction = "vertical"
+            else:
+                direction = "mixed"
+
+        rule = TopologyRule(
+            medium=pipe.medium,
+            pipe_size=pipe.size,
+            size_mm=pipe.size_mm,
+            typical_length_mm=length,
+            direction=direction,
+        )
+        rules.append(rule)
+
+    return rules
+
+
+def _extract_assembly_rules(pid: PIDDiagram, result: MatchResult) -> list:
+    """提取装配规则 - 组件之间的间距"""
+    rules = []
+    seen_types = set()
+
+    # 按类型分组组件，计算间距
+    type_groups = {}
+    for comp in result.components:
+        if comp.pid_type and comp.matched_material:
+            if comp.pid_type not in type_groups:
+                type_groups[comp.pid_type] = []
+            type_groups[comp.pid_type].append(comp)
+
+    for comp_type, comps in type_groups.items():
+        if comp_type in seen_types or len(comps) < 1:
+            continue
+        seen_types.add(comp_type)
+
+        # 计算平均间距
+        if len(comps) >= 2:
+            # 按x坐标排序
+            sorted_comps = sorted(comps, key=lambda c: c.pid_x)
+            spacings = []
+            for i in range(len(sorted_comps) - 1):
+                dx = sorted_comps[i + 1].pid_x - sorted_comps[i].pid_x
+                dy = sorted_comps[i + 1].pid_y - sorted_comps[i].pid_y
+                spacings.append(math.sqrt(dx * dx + dy * dy))
+            avg_spacing = sum(spacings) / len(spacings) if spacings else 100.0
+        else:
+            avg_spacing = 100.0  # 默认间距
+
+        rule = AssemblyRule(
+            component_type=comp_type,
+            spacing_mm=avg_spacing,
+            orientation="horizontal",
+        )
+        rules.append(rule)
+
+    return rules
+
+
+def _extract_hidden_rules(result: MatchResult) -> list:
+    """提取隐形参数规则"""
+    rules = []
+    seen = set()
+
+    for comp in result.components:
+        for item in comp.hidden_items:
+            key = f"{comp.matched_material.category if comp.matched_material else ''}_{comp.pid_pipe_size}_{item.name}"
+            if key in seen:
+                continue
+            seen.add(key)
+
+            rule = HiddenParamRule(
+                trigger_category=comp.matched_material.category if comp.matched_material else "",
+                trigger_size=comp.pid_pipe_size,
+                hidden_name=item.name,
+                hidden_category=item.category,
+                hidden_qty=int(item.quantity),
+                hidden_material=item.material,
+            )
+            rules.append(rule)
+
+    return rules
+
+
+def load_knowledge(knowledge_dir: str) -> list:
+    """加载所有已学知识"""
+    knowledge_list = []
+    if not os.path.exists(knowledge_dir):
+        return knowledge_list
+
+    for fname in os.listdir(knowledge_dir):
+        if fname.endswith('_knowledge.json'):
+            fpath = os.path.join(knowledge_dir, fname)
+            try:
+                with open(fpath, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    knowledge_list.append(data)
+            except (json.JSONDecodeError, IOError):
+                pass
+
+    return knowledge_list
+
+
+def apply_knowledge(
+    dxf_path: str,
+    bom_path: str,
+    knowledge_list: list,
+) -> MatchResult:
+    """
+    使用阶段：输入2D+点料表，利用已学知识进行匹配
+    返回增强后的MatchResult（包含library_part映射）
+    """
+    # 解析2D和点料表
+    pid = parse_dxf(dxf_path)
+    bom = parse_bom(bom_path)
+
+    # 基础匹配
+    result = match_components(pid, bom)
+
+    # 用学到的知识增强匹配结果
+    _enhance_with_knowledge(result, knowledge_list)
+
+    return result
+
+
+def _enhance_with_knowledge(result: MatchResult, knowledge_list: list):
+    """用学到的知识增强匹配结果"""
+    # 构建知识索引：(pid_type, pipe_size) -> library_part
+    knowledge_index = {}
+    for knowledge in knowledge_list:
+        for mapping in knowledge.get("part_mappings", []):
+            key = f"{mapping['pid_type']}_{mapping['pid_pipe_size']}"
+            if key not in knowledge_index:
+                knowledge_index[key] = mapping
+
+    # 应用到匹配结果
+    for comp in result.components:
+        if comp.pid_type:
+            key = f"{comp.pid_type}_{comp.pid_pipe_size}"
+            if key in knowledge_index:
+                learned = knowledge_index[key]
+                if not comp.library_part and learned.get("library_part"):
+                    comp.library_part = learned["library_part"]
+                    comp.match_reason += f"; 知识库匹配: {learned['library_part']}"
+                    comp.match_confidence = max(comp.match_confidence, 0.7)
+
+    # 应用隐形参数规则
+    for knowledge in knowledge_list:
+        for hidden_rule in knowledge.get("hidden_param_rules", []):
+            for comp in result.components:
+                if (comp.matched_material and
+                    comp.matched_material.category == hidden_rule.get("trigger_category") and
+                    comp.pid_pipe_size == hidden_rule.get("trigger_size")):
+                    # 检查是否已添加
+                    already_has = any(
+                        h.name == hidden_rule.get("hidden_name")
+                        for h in comp.hidden_items
+                    )
+                    if not already_has:
+                        hidden_mat = Material(
+                            name=hidden_rule.get("hidden_name", ""),
+                            material=hidden_rule.get("hidden_material", ""),
+                            spec=hidden_rule.get("hidden_name", ""),
+                            quantity=hidden_rule.get("hidden_qty", 1),
+                            unit="PCS",
+                            category=hidden_rule.get("hidden_category", "fitting"),
+                            size=hidden_rule.get("trigger_size", ""),
+                        )
+                        comp.hidden_items.append(hidden_mat)

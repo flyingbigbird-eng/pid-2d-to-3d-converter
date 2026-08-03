@@ -1,0 +1,137 @@
+{
+  "case_name": "海神VMB-700",
+  "part_mappings": [
+    {
+      "pid_type": "AV",
+      "pid_pipe_size": "1/2\"",
+      "bom_name_pattern": "气动隔膜阀1/2\"",
+      "bom_supplier": "CKD",
+      "library_part": "PLMV-K08.ipt",
+      "library_part_path": "E:/data/23D转换/海神VMB/海神VMB\\VMB海神三维文件\\VMB-700 1进1-2出-海神\\Workspaces\\Workspace\\PLMV-K08.ipt",
+      "match_confidence": 1.0,
+      "occurrence_count": 1
+    },
+    {
+      "pid_type": "MV",
+      "pid_pipe_size": "1/2\"",
+      "bom_name_pattern": "手动隔膜阀1/2\"",
+      "bom_supplier": "CKD",
+      "library_part": "PLMV-K08.ipt",
+      "library_part_path": "E:/data/23D转换/海神VMB/海神VMB\\VMB海神三维文件\\VMB-700 1进1-2出-海神\\Workspaces\\Workspace\\PLMV-K08.ipt",
+      "match_confidence": 1.0,
+      "occurrence_count": 3
+    },
+    {
+      "pid_type": "AV",
+      "pid_pipe_size": "1/2\"",
+      "bom_name_pattern": "气动隔膜阀1/2\"(NO常开）",
+      "bom_supplier": "CKD",
+      "library_part": "PLMV-K08.ipt",
+      "library_part_path": "E:/data/23D转换/海神VMB/海神VMB\\VMB海神三维文件\\VMB-700 1进1-2出-海神\\Workspaces\\Workspace\\PLMV-K08.ipt",
+      "match_confidence": 1.0,
+      "occurrence_count": 1
+    },
+    {
+      "pid_type": "AV",
+      "pid_pipe_size": "1/2\"",
+      "bom_name_pattern": "气动隔膜阀 1/2\"",
+      "bom_supplier": "Entegris",
+      "library_part": "",
+      "library_part_path": "",
+      "match_confidence": 1.0,
+      "occurrence_count": 2
+    },
+    {
+      "pid_type": "MV",
+      "pid_pipe_size": "1/2\"",
+      "bom_name_pattern": "手动隔膜阀 1/2\"",
+      "bom_supplier": "Entegris",
+      "library_part": "",
+      "library_part_path": "",
+      "match_confidence": 1.0,
+      "occurrence_count": 2
+    },
+    {
+      "pid_type": "MV",
+      "pid_pipe_size": "1\"",
+      "bom_name_pattern": "手动隔膜阀1\"",
+      "bom_supplier": "CKD",
+      "library_part": "PLMV-K16.ipt",
+      "library_part_path": "E:/data/23D转换/海神VMB/海神VMB\\VMB海神三维文件\\VMB-700 1进1-2出-海神\\Workspaces\\Workspace\\PLMV-K16.ipt",
+      "match_confidence": 0.9,
+      "occurrence_count": 1
+    }
+  ],
+  "topology_rules": [
+    {
+      "medium": "Chemical Out",
+      "pipe_size": "1/2\"",
+      "size_mm": 12.7,
+      "typical_length_mm": 5.93,
+      "direction": "mixed",
+      "branch_count": 0
+    }
+  ],
+  "assembly_rules": [
+    {
+      "component_type": "AV",
+      "spacing_mm": 17.21,
+      "orientation": "horizontal",
+      "base_offset": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "component_type": "MV",
+      "spacing_mm": 34.31,
+      "orientation": "horizontal",
+      "base_offset": [
+        0,
+        0,
+        0
+      ]
+    }
+  ],
+  "hidden_param_rules": [
+    {
+      "trigger_category": "valve",
+      "trigger_size": "1/2\"",
+      "hidden_name": "垫片1/2\"",
+      "hidden_category": "fitting",
+      "hidden_qty": 2,
+      "hidden_material": "PTFE"
+    },
+    {
+      "trigger_category": "valve",
+      "trigger_size": "1\"",
+      "hidden_name": "垫片1\"",
+      "hidden_category": "fitting",
+      "hidden_qty": 2,
+      "hidden_material": "PTFE"
+    }
+  ],
+  "pid_summary": {
+    "component_count": 10,
+    "pipe_count": 2,
+    "extents": [
+      2543.83293354834,
+      1576.251600559899,
+      2699.533006159049,
+      1772.844289924616
+    ]
+  },
+  "bom_summary": {
+    "total_materials": 712,
+    "category_stats": {
+      "valve": 102,
+      "other": 158,
+      "fitting": 290,
+      "pipe": 39,
+      "shell": 94,
+      "sensor": 20,
+      "accessory": 9
+    }
+  }
+}

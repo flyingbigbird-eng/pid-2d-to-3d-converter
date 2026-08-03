@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+venv/
+.venv/
+
+# Data files (large)
+data/uploads/
+data/output/
+data/library/
+data/knowledge/*_case.json
+data/knowledge/*_bom_stp.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Logs
+*.log
