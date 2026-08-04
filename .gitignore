@@ -29,3 +29,7 @@ test_*.py
 trace_*.py
 analyze_*.py
 test_*.stp
+test_*.py
+trace_*.py
+analyze_*.py
+test_*.stp
