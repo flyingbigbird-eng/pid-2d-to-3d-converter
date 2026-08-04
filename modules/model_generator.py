@@ -252,18 +252,28 @@ def generate_assembly(match_result: MatchResult, output_dir: str = "",
         step_out = os.path.join(output_dir, "assembly.stp")
         try:
             if step_library_path and os.path.exists(step_library_path):
-                # 收集实际匹配到的组件名称
-                comp_names = []
-                for p in parts:
-                    if p.source == "library" or p.part_type in ("valve", "fitting", "sensor"):
-                        comp_names.append(p.name)
+                # 从匹配的组件中提取型号代码和数量
+                from .step_filter import extract_model_codes
+                model_codes = []
+                code_counts = {}
+                for comp in match_result.components:
+                    if comp.matched_material:
+                        mat = comp.matched_material
+                        # 只处理阀门/接头/传感器（有三维零件的类别）
+                        if mat.category in ("valve", "fitting", "sensor"):
+                            codes = extract_model_codes(mat.spec, mat.name)
+                            if codes:
+                                # 取第一个型号代码
+                                code = codes[0]
+                                model_codes.append(code)
+                                code_counts[code] = code_counts.get(code, 0) + 1
                 
-                if comp_names:
-                    # 用step_filter筛选出匹配的零件
+                if model_codes:
+                    print(f"STEP导出: 型号代码={model_codes}, 数量={code_counts}")
                     from .step_filter import filter_step_file
-                    filter_step_file(step_library_path, comp_names, step_out)
+                    filter_step_file(step_library_path, model_codes, step_out, code_counts)
                 else:
-                    # 没有匹配组件，导出空壳体STL作为替代
+                    print("STEP导出: 未提取到型号代码，回退到STL")
                     if result.combined_mesh:
                         result.combined_mesh.export(
                             os.path.join(output_dir, "assembly.stl")

@@ -1,15 +1,14 @@
 """
 STEP文件过滤器
 ============================
-解析原始STEP装配体文件，根据实际匹配的组件名称，
+解析原始STEP装配体文件，根据实际匹配的组件型号代码和数量，
 提取对应零件的所有实体引用，生成只包含所需零件的新STEP文件。
 
-STEP引用链路:
-  PRODUCT -> PRODUCT_DEFINITION_FORMATION -> PRODUCT_DEFINITION
-  PRODUCT_DEFINITION -> PRODUCT_DEFINITION_SHAPE -> SHAPE_DEFINITION_REPRESENTATION
-  SHAPE_DEFINITION_REPRESENTATION -> SHAPE_REPRESENTATION
-  SHAPE_REPRESENTATION -> SHAPE_REPRESENTATION_RELATIONSHIP -> ADVANCED_BREP_SHAPE_REPRESENTATION
-  ADVANCED_BREP_SHAPE_REPRESENTATION -> MANIFOLD_SOLID_BREP -> CLOSED_SHELL -> ADVANCED_FACE -> ...
+核心改进：用BOM spec中的型号代码（如PLPV-K08、G2FATW08）精确匹配
+STEP文件中的PRODUCT名称，而不是用中文名模糊匹配。
+
+按装配实例(NEXT_ASSEMBLY_USAGE_OCCURRENCE)数量过滤，
+根据实际需要的组件数量只保留对应数量的实例。
 """
 import re
 import os
@@ -66,7 +65,6 @@ def parse_step_file(stp_path: str) -> Dict[str, Tuple[str, str]]:
                     etype = match.group(2)
                     entities[eid] = (etype, full_line)
                 else:
-                    # 复合格式: #id = ( TYPE(...) ... )
                     match2 = re.match(r'#(\d+)\s*=\s*\(\s*(\w+)\s*\(', full_line)
                     if match2:
                         eid = match2.group(1)
@@ -90,44 +88,89 @@ def _build_reverse_graph(entities: Dict) -> Dict[str, Set[str]]:
     return reverse
 
 
-def find_matching_products(entities: Dict, component_names: List[str]) -> Set[str]:
-    """找到名称匹配的PRODUCT实体ID集合
+def _build_pd_to_product_map(entities: Dict, reverse_graph: Dict) -> Dict[str, Tuple[str, str]]:
+    """建立 PRODUCT_DEFINITION -> (product_id, product_name) 映射
     
-    检查PRODUCT的两个名称字段和PRODUCT_RELATED_PRODUCT_CATEGORY中的名称
+    链路: PD正向引用PDF, PDF正向引用PRODUCT
+    #759224=PRODUCT_DEFINITION(...,#759336)  -- PD -> PDF
+    #759336=PRODUCT_DEFINITION_FORMATION(...,#759563)  -- PDF -> PRODUCT
+    """
+    pd_map = {}
+    for eid, (etype, line) in entities.items():
+        if etype != 'PRODUCT_DEFINITION':
+            continue
+        # PD正向引用PDF
+        refs = _extract_refs(line)
+        for ref in refs:
+            if ref != eid and ref in entities and entities[ref][0] == 'PRODUCT_DEFINITION_FORMATION':
+                pdf_id = ref
+                # PDF正向引用PRODUCT
+                pdf_refs = _extract_refs(entities[pdf_id][1])
+                for prod in pdf_refs:
+                    if prod != pdf_id and prod in entities and entities[prod][0] == 'PRODUCT':
+                        # 获取名称
+                        nm2 = re.search(r"'[^']*',\s*'([^']*)'", entities[prod][1])
+                        decoded2 = _decode_step_name(nm2.group(1)) if nm2 else ''
+                        nm1 = re.search(r"PRODUCT\(\s*'([^']*)'", entities[prod][1])
+                        decoded1 = _decode_step_name(nm1.group(1)) if nm1 else ''
+                        pd_map[eid] = (prod, decoded2 or decoded1)
+                        break
+                break
+    return pd_map
+
+
+def extract_model_codes(spec: str, name: str = "") -> List[str]:
+    """从BOM物料的spec字段和name中提取型号代码
+    
+    型号代码格式：大写字母+数字+横线，如 PLPV-K08, G2FATW08, G2FAEW16, NV-01-C003-F4
+    
+    Returns: 型号代码列表，已转为大写
+    """
+    codes = []
+    text = f"{spec} {name}"
+    
+    # 匹配多种型号代码格式
+    patterns = [
+        r'([A-Z][A-Z0-9]{1,3}[-_][A-Z0-9]+(?:[-_][A-Z0-9]+)*)',  # PLPV-K08, NV-01-C003-F4
+        r'([A-Z]{2,4}[0-9]{2,4}[A-Z]{0,2}[0-9]{0,2})',  # G2FATW08, G2FAEW16
+        r'([A-Z]{2,5}-[A-Z0-9]+)',  # SE3200-420-P3
+        r'([A-Z]{3,6}[0-9]{3,6})',  # RC200015
+    ]
+    
+    for pat in patterns:
+        matches = re.findall(pat, text)
+        for m in matches:
+            m_upper = m.upper()
+            if len(m_upper) >= 3 and m_upper not in codes:
+                codes.append(m_upper)
+    
+    return codes
+
+
+def find_matching_products(entities: Dict, model_codes: List[str]) -> Set[str]:
+    """用型号代码精确匹配STEP文件中的PRODUCT实体
+    
+    Args:
+        entities: STEP实体字典
+        model_codes: 型号代码列表（如['PLPV-K08', 'G2FATW08']），已大写
     """
     matched_ids = set()
+    if not model_codes:
+        return matched_ids
     
-    # 收集所有匹配关键词
-    keywords = []
-    for name in component_names:
-        if not name:
-            continue
-        keywords.append(name.lower())
-        # 也拆分关键词
-        for part in re.split(r'[\s\-_/()]', name):
-            if len(part) >= 2:
-                keywords.append(part.lower())
-    
-    # 1. 检查PRODUCT实体（两个名称字段）
+    # 先收集所有PRODUCT的名称
+    product_names = {}  # {product_id: [name1, name2, ...]}
     for eid, (etype, line) in entities.items():
         if etype != 'PRODUCT':
             continue
-        
-        # 提取第一个名称
         names = []
         name_matches = re.findall(r"'([^']*)'", line)
         for nm in name_matches:
             decoded = _decode_step_name(nm)
             names.append(decoded)
-        
-        # 检查是否匹配
-        all_names = ' '.join(names).lower()
-        for kw in keywords:
-            if kw in all_names:
-                matched_ids.add(eid)
-                break
+        product_names[eid] = names
     
-    # 2. 检查PRODUCT_RELATED_PRODUCT_CATEGORY (可能包含英文名)
+    # 收集PRODUCT_RELATED_PRODUCT_CATEGORY中的名称
     prpc_to_product = {}
     for eid, (etype, line) in entities.items():
         if etype != 'PRODUCT_RELATED_PRODUCT_CATEGORY':
@@ -136,111 +179,161 @@ def find_matching_products(entities: Dict, component_names: List[str]) -> Set[st
         if not name_match:
             continue
         decoded = _decode_step_name(name_match.group(1))
-        
-        # 找到这个PRPC引用的PRODUCT
         refs = _extract_refs(line)
         for ref in refs:
             if ref != eid and ref in entities and entities[ref][0] == 'PRODUCT':
                 prpc_to_product[ref] = decoded
     
-    # 用PRPC的名称匹配
-    for product_id, prpc_name in prpc_to_product.items():
-        if product_id in matched_ids:
-            continue
-        for kw in keywords:
-            if kw in prpc_name.lower():
-                matched_ids.add(product_id)
+    # 精确匹配：型号代码 == PRODUCT名称
+    for prod_id, names in product_names.items():
+        all_text = ' '.join(names).upper()
+        for code in model_codes:
+            code_upper = code.upper()
+            if code_upper in all_text:
+                matched_ids.add(prod_id)
                 break
+        else:
+            # 检查PRPC名称
+            prpc_name = prpc_to_product.get(prod_id, '')
+            if prpc_name:
+                prpc_upper = prpc_name.upper()
+                for code in model_codes:
+                    if code.upper() in prpc_upper:
+                        matched_ids.add(prod_id)
+                        break
+    
+    print(f"  型号代码匹配: {model_codes} -> {len(matched_ids)} PRODUCT(s)")
+    for mid in matched_ids:
+        names = product_names.get(mid, [])
+        print(f"    #{mid}: {names}")
     
     return matched_ids
 
 
-def collect_geometry_entities(entities: Dict, reverse_graph: Dict, 
-                               product_ids: Set[str]) -> Set[str]:
-    """从PRODUCT实体出发，沿着完整引用链收集所有几何相关实体
+def _find_nau_instances(entities: Dict, pd_to_product: Dict) -> Dict[str, List[str]]:
+    """找到每个PRODUCT_DEFINITION对应的所有NAU实例ID
     
-    链路:
-      PRODUCT -> PRODUCT_DEFINITION_FORMATION (正向)
-      PRODUCT_DEFINITION_FORMATION -> PRODUCT_DEFINITION (反向)
-      PRODUCT_DEFINITION -> PRODUCT_DEFINITION_SHAPE (反向)
-      PRODUCT_DEFINITION_SHAPE -> SHAPE_DEFINITION_REPRESENTATION (反向)
-      SHAPE_DEFINITION_REPRESENTATION -> SHAPE_REPRESENTATION (正向)
-      SHAPE_REPRESENTATION -> SHAPE_REPRESENTATION_RELATIONSHIP (反向)
-      SHAPE_REPRESENTATION_RELATIONSHIP -> ADVANCED_BREP_SHAPE_REPRESENTATION (正向)
-      ADVANCED_BREP_SHAPE_REPRESENTATION -> MANIFOLD_SOLID_BREP (正向)
-      MANIFOLD_SOLID_BREP -> CLOSED_SHELL (正向)
-      -> 从所有实体正向收集所有依赖
+    Returns: {child_pd_id: [nau_id, ...]}
+    """
+    nau_map = {}
+    for eid, (etype, line) in entities.items():
+        if etype != 'NEXT_ASSEMBLY_USAGE_OCCURRENCE':
+            continue
+        refs = _extract_refs(line)
+        if len(refs) >= 3:
+            child_pd = refs[2]
+            if child_pd not in nau_map:
+                nau_map[child_pd] = []
+            nau_map[child_pd].append(eid)
+    return nau_map
+
+
+def collect_geometry_for_instances(
+    entities: Dict, 
+    reverse_graph: Dict,
+    product_ids: Set[str],
+    component_counts: Dict[str, int]
+) -> Set[str]:
+    """根据实际需要的组件数量，收集几何实体
+    
+    Args:
+        entities: STEP实体字典
+        reverse_graph: 反向引用图
+        product_ids: 匹配到的PRODUCT ID集合
+        component_counts: {product_name: needed_count} 每种组件需要的数量
     """
     collected = set()
     
-    # Step 1: 从PRODUCT找到PRODUCT_DEFINITION_FORMATION (反向)
-    pdf_ids = set()
-    for pid in product_ids:
-        referrers = reverse_graph.get(pid, set())
-        for ref in referrers:
-            if ref in entities and entities[ref][0] == 'PRODUCT_DEFINITION_FORMATION':
-                pdf_ids.add(ref)
+    # 1. 建立PD到PRODUCT的映射
+    pd_to_product = _build_pd_to_product_map(entities, reverse_graph)
     
-    # Step 2: PRODUCT_DEFINITION_FORMATION -> PRODUCT_DEFINITION (反向)
-    pd_ids = set()
-    for pdf in pdf_ids:
-        referrers = reverse_graph.get(pdf, set())
-        for ref in referrers:
-            if ref in entities and entities[ref][0] == 'PRODUCT_DEFINITION':
-                pd_ids.add(ref)
+    # 2. 找到匹配PRODUCT对应的所有PD
+    matched_pds = {}  # {product_id: [pd_id, ...]}
+    for pd_id, (prod_id, prod_name) in pd_to_product.items():
+        if prod_id in product_ids:
+            if prod_id not in matched_pds:
+                matched_pds[prod_id] = []
+            matched_pds[prod_id].append(pd_id)
     
-    # Step 3: PRODUCT_DEFINITION -> PRODUCT_DEFINITION_SHAPE (反向)
-    pds_ids = set()
-    for pd in pd_ids:
-        referrers = reverse_graph.get(pd, set())
-        for ref in referrers:
-            if ref in entities and entities[ref][0] == 'PRODUCT_DEFINITION_SHAPE':
-                pds_ids.add(ref)
+    # 3. 找到每个PD对应的NAU实例
+    nau_map = _find_nau_instances(entities, pd_to_product)
     
-    # Step 4: PRODUCT_DEFINITION_SHAPE -> SHAPE_DEFINITION_REPRESENTATION (反向)
-    sdr_ids = set()
-    for pds in pds_ids:
-        referrers = reverse_graph.get(pds, set())
-        for ref in referrers:
-            if ref in entities and entities[ref][0] == 'SHAPE_DEFINITION_REPRESENTATION':
-                sdr_ids.add(ref)
+    # 4. 对每个匹配的PRODUCT，只保留需要数量的NAU实例
+    selected_naus = set()
+    for prod_id, pd_ids in matched_pds.items():
+        prod_name = ''
+        for pd_id in pd_ids:
+            if pd_id in pd_to_product:
+                prod_name = pd_to_product[pd_id][1]
+                break
+        
+        # 确定需要的实例数 - 用型号代码精确匹配
+        needed = 0
+        prod_name_upper = prod_name.upper()
+        for code, count in component_counts.items():
+            code_upper = code.upper()
+            if code_upper and code_upper in prod_name_upper:
+                needed = max(needed, count)
+                break
+        if needed == 0:
+            needed = 1  # 至少保留1个
+        
+        # 按NAU ID排序，只取前needed个
+        all_naus = []
+        for pd_id in pd_ids:
+            all_naus.extend(nau_map.get(pd_id, []))
+        all_naus.sort(key=lambda x: int(x))
+        
+        selected = all_naus[:needed]
+        selected_naus.update(selected)
+        print(f"  PRODUCT #{prod_id} ({prod_name}): {len(all_naus)} NAUs, keeping {len(selected)}")
     
-    # Step 5: SHAPE_DEFINITION_REPRESENTATION -> SHAPE_REPRESENTATION (正向)
-    sr_ids = set()
-    for sdr in sdr_ids:
-        refs = _extract_refs(entities[sdr][1])
-        for ref in refs:
-            if ref != sdr and ref in entities:
-                sr_ids.add(ref)
-    
-    # Step 6: SHAPE_REPRESENTATION -> SHAPE_REPRESENTATION_RELATIONSHIP (反向)
-    srr_ids = set()
-    for sr in sr_ids:
-        referrers = reverse_graph.get(sr, set())
-        for ref in referrers:
-            if ref in entities and entities[ref][0] == 'SHAPE_REPRESENTATION_RELATIONSHIP':
-                srr_ids.add(ref)
-    
-    # Step 7: SRR -> ADVANCED_BREP_SHAPE_REPRESENTATION (正向)
-    absr_ids = set()
-    for srr in srr_ids:
-        refs = _extract_refs(entities[srr][1])
-        for ref in refs:
-            if ref != srr and ref in entities:
-                absr_ids.add(ref)
-    
-    # Step 8: 收集所有起始点
+    # 5. 从每个匹配的PRODUCT出发，追踪完整几何链路
+    # 链路方向（关键！）:
+    #   PRODUCT <- PDF (反向: PDF正向引用PRODUCT)
+    #   PDF <- PD (反向: PD正向引用PDF)  
+    #   PD <- PDS (反向: PDS正向引用PD)
+    #   PDS <- SDR (反向: SDR正向引用PDS)
+    #   SDR -> SR (正向: SDR引用SR)
+    #   SR <- SRR/RR (反向: SRR/RR正向引用SR)
+    #   SRR/RR -> ABSR (正向: SRR/RR引用ABSR)
     start_ids = set()
-    start_ids.update(product_ids)  # PRODUCT
-    start_ids.update(pdf_ids)      # PRODUCT_DEFINITION_FORMATION
-    start_ids.update(pd_ids)       # PRODUCT_DEFINITION
-    start_ids.update(pds_ids)      # PRODUCT_DEFINITION_SHAPE
-    start_ids.update(sdr_ids)      # SHAPE_DEFINITION_REPRESENTATION
-    start_ids.update(sr_ids)       # SHAPE_REPRESENTATION
-    start_ids.update(srr_ids)      # SHAPE_REPRESENTATION_RELATIONSHIP
-    start_ids.update(absr_ids)     # ADVANCED_BREP_SHAPE_REPRESENTATION
+    start_ids.update(product_ids)
+    start_ids.update(selected_naus)
     
-    # Step 9: 从所有起始点正向收集依赖
+    for pid in product_ids:
+        if pid not in entities:
+            continue
+        # PRODUCT反向找PDF (PDF正向引用PRODUCT)
+        for pdf in reverse_graph.get(pid, set()):
+            if pdf in entities and entities[pdf][0] == 'PRODUCT_DEFINITION_FORMATION':
+                start_ids.add(pdf)
+                # PDF反向找PD (PD正向引用PDF)
+                for pd_id in reverse_graph.get(pdf, set()):
+                    if pd_id in entities and entities[pd_id][0] == 'PRODUCT_DEFINITION':
+                        start_ids.add(pd_id)
+                        # PD反向找PDS (PDS正向引用PD)
+                        for pds in reverse_graph.get(pd_id, set()):
+                            if pds in entities and entities[pds][0] == 'PRODUCT_DEFINITION_SHAPE':
+                                start_ids.add(pds)
+                                # PDS反向找SDR (SDR正向引用PDS)
+                                for sdr in reverse_graph.get(pds, set()):
+                                    if sdr in entities and entities[sdr][0] == 'SHAPE_DEFINITION_REPRESENTATION':
+                                        start_ids.add(sdr)
+                                        # SDR正向引用SR
+                                        for sr in _extract_refs(entities[sdr][1]):
+                                            if sr != sdr and sr in entities and entities[sr][0] == 'SHAPE_REPRESENTATION':
+                                                start_ids.add(sr)
+                                                # SR反向找SRR/RR
+                                                for srr in reverse_graph.get(sr, set()):
+                                                    if srr in entities:
+                                                        srr_type = entities[srr][0]
+                                                        if srr_type in ('SHAPE_REPRESENTATION_RELATIONSHIP', 'REPRESENTATION_RELATIONSHIP'):
+                                                            start_ids.add(srr)
+                                                            # SRR/RR正向引用可能有ABSR
+                                                            start_ids.update(_extract_refs(entities[srr][1]))
+    
+    # 6. 正向收集所有依赖
     to_process = list(start_ids)
     while to_process:
         eid = to_process.pop(0)
@@ -254,26 +347,7 @@ def collect_geometry_entities(entities: Dict, reverse_graph: Dict,
                 if ref_id in entities:
                     to_process.append(ref_id)
     
-    # Step 10: 收集装配关系 (NEXT_ASSEMBLY_USAGE_OCCURRENCE)
-    for eid, (etype, line) in entities.items():
-        if etype == 'NEXT_ASSEMBLY_USAGE_OCCURRENCE':
-            refs = _extract_refs(line)
-            for ref in refs:
-                if ref in collected:
-                    collected.add(eid)
-                    break
-    
-    # Step 11: 收集MDGPR中引用的STYLED_ITEM (如果其item在collected中)
-    for eid, (etype, line) in entities.items():
-        if etype == 'STYLED_ITEM':
-            refs = _extract_refs(line)
-            for ref in refs:
-                if ref != eid and ref in collected:
-                    collected.add(eid)
-                    break
-    
-    # Step 12: 补充缺失的引用 (被collected中实体引用但未被收集的实体)
-    # 多轮补充直到稳定
+    # 7. 补充缺失引用
     for _ in range(10):
         to_add = set()
         for eid in collected:
@@ -291,22 +365,37 @@ def collect_geometry_entities(entities: Dict, reverse_graph: Dict,
     return collected
 
 
-def filter_step_file(stp_path: str, component_names: List[str], 
-                     output_path: str) -> str:
-    """过滤STEP文件，只保留匹配的组件"""
+def filter_step_file(stp_path: str, model_codes: List[str], 
+                     output_path: str,
+                     component_counts: Dict[str, int] = None) -> str:
+    """过滤STEP文件，只保留匹配的组件
+    
+    Args:
+        stp_path: 原始STEP文件路径
+        model_codes: 型号代码列表（如['PLPV-K08', 'G2FATW08']）
+        output_path: 输出STEP文件路径
+        component_counts: {型号代码: 数量} 每种组件需要的实例数
+    """
+    if component_counts is None:
+        from collections import Counter
+        component_counts = dict(Counter(model_codes))
+    
     # 1. 解析STEP文件
     entities = parse_step_file(stp_path)
     
     # 2. 构建反向引用图
     reverse_graph = _build_reverse_graph(entities)
     
-    # 3. 找到匹配的PRODUCT实体
-    matched_product_ids = find_matching_products(entities, component_names)
+    # 3. 用型号代码精确匹配PRODUCT
+    matched_product_ids = find_matching_products(entities, model_codes)
     
-    # 4. 收集所有几何相关实体
+    # 4. 收集所有几何相关实体（按实例数量）
     if matched_product_ids:
-        needed_ids = collect_geometry_entities(entities, reverse_graph, matched_product_ids)
+        needed_ids = collect_geometry_for_instances(
+            entities, reverse_graph, matched_product_ids, component_counts
+        )
     else:
+        print(f"  WARNING: 没有找到匹配的PRODUCT，型号代码: {model_codes}")
         needed_ids = set(entities.keys())
     
     # 5. 读取原始文件获取HEADER
@@ -323,7 +412,6 @@ def filter_step_file(stp_path: str, component_names: List[str],
     for eid in sorted_ids:
         etype, line = entities[eid]
         
-        # 对MDGPR做特殊处理：过滤掉不在needed_ids中的引用
         if etype == 'MECHANICAL_DESIGN_GEOMETRIC_PRESENTATION_REPRESENTATION':
             def filter_refs(m):
                 ref_id = m.group(1)
@@ -331,7 +419,6 @@ def filter_step_file(stp_path: str, component_names: List[str],
                     return m.group(0)
                 return ''
             filtered_line = re.sub(r'#(\d+)', filter_refs, line)
-            # 清理空引用
             filtered_line = re.sub(r',\s*,', ',', filtered_line)
             filtered_line = re.sub(r'\(\s*,', '(', filtered_line)
             filtered_line = re.sub(r',\s*\)', ')', filtered_line)
@@ -347,4 +434,5 @@ def filter_step_file(stp_path: str, component_names: List[str],
             f.write(line + '\n')
         f.write('ENDSEC;\nEND-ISO-10303-21;\n')
     
+    print(f"  STEP过滤完成: {len(needed_ids)} 实体 -> {os.path.getsize(output_path)} 字节")
     return output_path
