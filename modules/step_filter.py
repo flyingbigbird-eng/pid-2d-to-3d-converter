@@ -282,7 +282,7 @@ def collect_geometry_for_instances(
         for code, count in component_counts.items():
             code_upper = code.upper()
             if code_upper and code_upper in prod_name_upper:
-                needed = max(needed, count)
+                needed = max(needed, int(count))  # int: BOM数量可能是float
                 break
         if needed == 0:
             needed = 1  # 至少保留1个

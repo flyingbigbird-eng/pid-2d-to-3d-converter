@@ -263,26 +263,37 @@ def generate_assembly(match_result: MatchResult, output_dir: str = "",
         step_out = os.path.join(output_dir, "assembly.stp")
         try:
             if step_paths:
-                # 从匹配的组件中提取型号代码和数量
-                # 数量 = 点料表物料数量（STP与物料一一对应），而非PID组件数
                 from .step_filter import extract_model_codes
                 model_codes = []
                 code_counts = {}
-                for comp in match_result.components:
-                    if comp.matched_material:
-                        mat = comp.matched_material
-                        # 只处理阀门/接头/传感器（有三维零件的类别）
-                        if mat.category in ("valve", "fitting", "sensor"):
-                            codes = extract_model_codes(mat.spec, mat.name)
-                            if codes:
-                                code = codes[0]
-                                if code not in model_codes:
-                                    model_codes.append(code)
-                                # 累加点料表数量（同一型号可能在多个组件中复用）
-                                code_counts[code] = code_counts.get(code, 0) + float(mat.quantity or 0)
-                
+
+                # 优先以点料表为最全基准：用 bom_library_models（点料表全部匹配到库型号的物料）
+                bom_models = getattr(match_result, 'bom_library_models', None) or []
+                if bom_models:
+                    for bl in bom_models:
+                        # 只处理能映射到库型号、且属于有三维零件的类别
+                        if bl.get('matched') and bl.get('model'):
+                            cat = bl.get('category', '')
+                            if cat in ("valve", "fitting", "sensor"):
+                                model = bl['model']
+                                if model not in model_codes:
+                                    model_codes.append(model)
+                                code_counts[model] = code_counts.get(model, 0) + float(bl.get('qty', 0) or 0)
+                else:
+                    # 兜底：从匹配组件中提取（旧逻辑）
+                    for comp in match_result.components:
+                        if comp.matched_material:
+                            mat = comp.matched_material
+                            if mat.category in ("valve", "fitting", "sensor"):
+                                codes = extract_model_codes(mat.spec, mat.name)
+                                if codes:
+                                    code = codes[0]
+                                    if code not in model_codes:
+                                        model_codes.append(code)
+                                    code_counts[code] = code_counts.get(code, 0) + float(mat.quantity or 0)
+
                 if model_codes:
-                    print(f"STEP导出: 型号代码={model_codes}, 数量={code_counts}, 库={step_paths}")
+                    print(f"STEP导出(BOM基准): 型号代码={model_codes}, 数量={code_counts}, 库={step_paths}")
                     from .step_filter import filter_step_files
                     filter_step_files(step_paths, model_codes, step_out, code_counts)
                 else:

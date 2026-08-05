@@ -81,6 +81,8 @@ class MatchResult:
     unmatched_materials: list = field(default_factory=list)   # 未匹配的BOM物料
     hidden_bom: list = field(default_factory=list)  # 隐形参数生成的额外BOM
     summary: dict = field(default_factory=dict)
+    # 点料表全部有U9码的物料及库型号映射结果（以点料表为最全基准）
+    bom_library_models: list = field(default_factory=list)  # [{u9,name,spec,qty,category,model,matched,source}]
 
     def to_dict(self) -> dict:
         return {
@@ -90,6 +92,7 @@ class MatchResult:
             "unmatched_material_count": len(self.unmatched_materials),
             "hidden_bom": [h.to_dict() if isinstance(h, Material) else h for h in self.hidden_bom],
             "summary": self.summary,
+            "bom_library_models": self.bom_library_models,
         }
 
 

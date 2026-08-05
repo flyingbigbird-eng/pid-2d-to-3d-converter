@@ -509,7 +509,7 @@ def apply_knowledge(
 ) -> MatchResult:
     """
     使用阶段：输入2D+点料表，利用已学知识进行匹配
-    返回增强后的MatchResult（包含library_part映射）
+    返回增强后的MatchResult（包含library_part映射 + 点料表全量U9库型号映射）
     """
     # 解析2D和点料表
     pid = parse_dxf(dxf_path)
@@ -521,7 +521,76 @@ def apply_knowledge(
     # 用学到的知识增强匹配结果
     _enhance_with_knowledge(result, knowledge_list)
 
+    # 以点料表为最全基准：遍历全部有U9码的物料，匹配库型号（未匹配的标红备用）
+    result.bom_library_models = _build_bom_library_models(bom, knowledge_list)
+
     return result
+
+
+def _build_bom_library_models(bom, knowledge_list: list) -> list:
+    """遍历点料表全部有U9码的物料，用知识库的U9->型号映射匹配库模型
+
+    返回 [{u9, name, spec, qty, category, model, matched, source}]
+    source: 'library'=精确配库, 'pid'=来自PID组件, ''=未匹配
+    """
+    # 知识索引：u9_code -> library_part (型号)，以及 pid_type_pipe -> model 兜底
+    u9_to_model = {}
+    pid_to_model = {}
+    for knowledge in knowledge_list:
+        for mapping in knowledge.get("part_mappings", []):
+            u9 = mapping.get("u9_code") or ""
+            model = mapping.get("library_part") or ""
+            if u9 and model and "." not in model:  # 排除.ipt旧兜底
+                u9_to_model[u9] = model
+            pid_key = f"{mapping.get('pid_type','')}_{mapping.get('pid_pipe_size','')}"
+            if model and "." not in model:
+                pid_to_model.setdefault(pid_key, model)
+
+    from .step_filter import extract_model_codes
+    from .bom_parser import BOMDocument
+
+    results = []
+    seen_spec = set()  # 按 (型号,名称) 去重，避免同物料重复
+    for mat in bom.all_materials:
+        u9 = (mat.k3_code or "").strip()
+        if not u9:
+            continue
+
+        # 1) U9精确匹配
+        model = u9_to_model.get(u9, "")
+        matched_source = "library" if model else ""
+
+        # 2) 兜底：spec型号匹配知识库pid映射 或 U9映射的型号前缀
+        if not matched_source:
+            codes = extract_model_codes(mat.spec, mat.name)
+            for c in codes:
+                if c in u9_to_model.values():
+                    model = c
+                    matched_source = "library"
+                    break
+            if not matched_source:
+                # 检查知识库是否存在该型号映射
+                for m_model in set(u9_to_model.values()):
+                    for c in codes:
+                        if c in m_model or m_model in c:
+                            model = m_model
+                            matched_source = "library"
+                            break
+                    if model:
+                        break
+
+        results.append({
+            "u9": u9,
+            "name": mat.name,
+            "spec": mat.spec,
+            "qty": mat.quantity,
+            "category": mat.category,
+            "model": model,
+            "matched": bool(model),
+            "source": matched_source,
+        })
+
+    return results
 
 
 def _enhance_with_knowledge(result: MatchResult, knowledge_list: list):
