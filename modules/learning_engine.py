@@ -13,12 +13,14 @@
 import json
 import os
 import math
+import re
 import numpy as np
 from dataclasses import dataclass, field
 from typing import Optional
 from .dxf_parser import PIDDiagram, parse_dxf, ComponentNode, PipeSegment
 from .bom_parser import BOMDocument, parse_bom, Material
 from .matcher import MatchResult, match_components, MatchedComponent
+from .step_filter import parse_step_file, _decode_step_name
 
 
 @dataclass
@@ -28,10 +30,11 @@ class PartMapping:
     pid_pipe_size: str      # 管径
     bom_name_pattern: str   # BOM物料名称模式
     bom_supplier: str       # 品牌供应商
-    library_part: str       # 对应的三维零件文件
+    library_part: str       # 对应的三维零件文件/型号
     library_part_path: str  # 零件文件路径
     match_confidence: float = 0.0
     occurrence_count: int = 1  # 在历史案例中出现次数
+    u9_code: str = ""       # 物料U9码（点料表唯一标识）
 
     def to_dict(self) -> dict:
         return {
@@ -43,6 +46,7 @@ class PartMapping:
             "library_part_path": self.library_part_path,
             "match_confidence": round(self.match_confidence, 2),
             "occurrence_count": self.occurrence_count,
+            "u9_code": self.u9_code,
         }
 
 
@@ -211,6 +215,7 @@ def _scan_3d_library(ref_3d_dir: str) -> dict:
         "parts": [],  # 零件文件列表
         "assemblies": [],  # 装配文件列表
         "step_files": [],  # STEP文件列表
+        "stp_models": {},  # 型号代码 -> [STP文件全路径] (从STEP PRODUCT名称解析)
         "dir": ref_3d_dir,
     }
 
@@ -241,53 +246,130 @@ def _scan_3d_library(ref_3d_dir: str) -> dict:
                     "path": rel_path,
                     "full_path": fpath,
                 })
+                # 解析STP里的PRODUCT型号，建立 型号->库文件 索引
+                _scan_stp_models(fpath, index["stp_models"])
 
     return index
 
 
+def _scan_stp_models(stp_path: str, model_index: dict) -> None:
+    """解析单个STP文件的PRODUCT型号，登记到 index["stp_models"]
+
+    stp_models: {型号代码(大写): [STP文件全路径]}
+    型号从STEP PRODUCT名称字段提取，如 PLPV-K08, G2FATW08, MMD303RN。
+    """
+    try:
+        entities = parse_step_file(stp_path)
+    except Exception:
+        return
+
+    for eid, (etype, line) in entities.items():
+        if etype != 'PRODUCT':
+            continue
+        name_matches = re.findall(r"'([^']*)'", line)
+        for nm in name_matches:
+            decoded = _decode_step_name(nm)
+            code = _extract_step_model_code(decoded)
+            if code:
+                model_index.setdefault(code, [])
+                if stp_path not in model_index[code]:
+                    model_index[code].append(stp_path)
+
+
+def _extract_step_model_code(text: str) -> str:
+    """从STEP PRODUCT名称文本中提取商品型号代码（与spec端用同一规则）"""
+    if not text:
+        return ""
+    from .step_filter import _extract_codes_from_text
+    codes = _extract_codes_from_text(text)
+    # 取第一个候选（STP PRODUCT名通常是"中文名|型号名|..."，型号名在字段里）
+    for c in codes:
+        # 排除明显非型号（中文解码残留、超长hex、通用词）
+        if len(c) >= 4 and not re.fullmatch(r'[0-9A-F]{6,}', c):
+            return c
+    return ""
+
+
 def _extract_part_mappings(result: MatchResult, library_index: dict) -> list:
-    """从匹配结果中提取零件映射规则"""
+    """从匹配结果中提取零件映射规则
+
+    现在优先用 BOM 物料的 spec 型号代码 匹配 STP 库中的型号 (stp_models)，
+    建立"物料 -> 三维型号 -> 库文件"的映射。U9码同时记录在 mapping 里，
+    供后续以 U9 为基准做 1:1 匹配。
+    """
     mappings = []
     seen = set()
 
-    # 建零件名到路径的索引
+    # 建零件名到路径的索引（.ipt 旧逻辑保留）
     part_name_to_path = {}
     for p in library_index.get("parts", []):
         part_name_to_path[p["name"]] = p["full_path"]
+
+    # STP 型号索引: 型号代码 -> 全路径（新逻辑核心）
+    stp_models = library_index.get("stp_models", {})
+
+    from .step_filter import extract_model_codes
 
     for comp in result.components:
         if not comp.matched_material:
             continue
 
-        key = f"{comp.pid_type}_{comp.pid_pipe_size}_{comp.matched_material.name}"
+        mat = comp.matched_material
+
+        # 从物料 spec/name 提取型号代码
+        spec_codes = extract_model_codes(mat.spec, mat.name)
+
+        # 匹配 STP 库型号
+        matched_stp_model = ""
+        matched_stp_path = ""
+        for code in spec_codes:
+            code_up = code.upper()
+            if code_up in stp_models:
+                matched_stp_model = code_up
+                matched_stp_path = stp_models[code_up][0]
+                break
+        # 兜底：模糊匹配（型号前缀包含关系，要求 code 够长且含数字，避免错误前缀匹配）
+        if not matched_stp_model:
+            for code in spec_codes:
+                code_up = code.upper()
+                if len(code_up) < 5 or not re.search(r'\d', code_up):
+                    continue
+                for model_name in stp_models:
+                    if code_up in model_name or model_name in code_up:
+                        matched_stp_model = model_name
+                        matched_stp_path = stp_models[model_name][0]
+                        break
+                if matched_stp_model:
+                    break
+
+        # 去重键（含型号）
+        key = f"{comp.pid_type}_{comp.pid_pipe_size}_{mat.name}_{matched_stp_model}"
         if key in seen:
-            # 增加出现次数
             for m in mappings:
-                if f"{m.pid_type}_{m.pid_pipe_size}_{m.bom_name_pattern}" == key:
+                if (f"{m.pid_type}_{m.pid_pipe_size}_{m.bom_name_pattern}_{m.library_part}" == key):
                     m.occurrence_count += 1
+                    break
             continue
         seen.add(key)
 
+        # 兼容旧 .ipt 匹配
         library_part = comp.library_part
-        library_part_path = ""
-        if library_part and library_part in part_name_to_path:
-            library_part_path = part_name_to_path[library_part]
-        elif library_part:
-            # 模糊匹配
-            for pname, ppath in part_name_to_path.items():
-                if library_part.lower() in pname.lower() or pname.lower() in library_part.lower():
-                    library_part_path = ppath
-                    break
+        if not matched_stp_model and library_part and library_part in part_name_to_path:
+            matched_stp_path = part_name_to_path[library_part]
+            matched_stp_model = library_part
 
         mapping = PartMapping(
             pid_type=comp.pid_type,
             pid_pipe_size=comp.pid_pipe_size,
-            bom_name_pattern=comp.matched_material.name,
-            bom_supplier=comp.matched_material.supplier,
-            library_part=library_part,
-            library_part_path=library_part_path,
+            bom_name_pattern=mat.name,
+            bom_supplier=mat.supplier,
+            library_part=matched_stp_model or library_part,
+            library_part_path=matched_stp_path,
             match_confidence=comp.match_confidence,
+            occurrence_count=1,
         )
+        # 额外记录 U9 码
+        mapping.u9_code = mat.k3_code
         mappings.append(mapping)
 
     return mappings

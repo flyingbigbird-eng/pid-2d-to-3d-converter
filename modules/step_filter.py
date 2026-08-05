@@ -121,29 +121,38 @@ def _build_pd_to_product_map(entities: Dict, reverse_graph: Dict) -> Dict[str, T
 
 def extract_model_codes(spec: str, name: str = "") -> List[str]:
     """从BOM物料的spec字段和name中提取型号代码
-    
-    型号代码格式：大写字母+数字+横线，如 PLPV-K08, G2FATW08, G2FAEW16, NV-01-C003-F4
-    
-    Returns: 型号代码列表，已转为大写
+
+    型号代码格式：字母+数字组合，如 PLPV-K08, G2FATW08, MMD303RN, CW-UE-W4-S。
+    统一用 _extract_codes_from_text 提取，与学习引擎的库型号提取保持一致。
+    """
+    text = f"{spec} {name}"
+    return _extract_codes_from_text(text)
+
+
+def _extract_codes_from_text(text: str) -> List[str]:
+    """从文本中提取型号代码（统一规则，供spec/库型号两端使用）
+
+    要求：型号必须含数字（真型号都有数字，如 G2FATW08, PLPV-K08, MMD303RN），
+    纯字母前缀（PLMV)、品牌名（SUPER、Entegris）不被误当作型号。
     """
     codes = []
-    text = f"{spec} {name}"
-    
-    # 匹配多种型号代码格式
-    patterns = [
-        r'([A-Z][A-Z0-9]{1,3}[-_][A-Z0-9]+(?:[-_][A-Z0-9]+)*)',  # PLPV-K08, NV-01-C003-F4
-        r'([A-Z]{2,4}[0-9]{2,4}[A-Z]{0,2}[0-9]{0,2})',  # G2FATW08, G2FAEW16
-        r'([A-Z]{2,5}-[A-Z0-9]+)',  # SE3200-420-P3
-        r'([A-Z]{3,6}[0-9]{3,6})',  # RC200015
+    up = text.upper()
+    token_pats = [
+        r'\b[A-Z][A-Z0-9]*[-_][A-Z0-9]+(?:[-_][A-Z0-9]+)*\b',   # 带分隔符：PLPV-K08, CW-UE-W4-S, MRV-15F
+        r'\b[A-Z][A-Z0-9]{3,}\b',                                 # 无分隔符连续：MMD303RN, G2FATW08
     ]
-    
-    for pat in patterns:
-        matches = re.findall(pat, text)
-        for m in matches:
-            m_upper = m.upper()
-            if len(m_upper) >= 3 and m_upper not in codes:
-                codes.append(m_upper)
-    
+    for tpat in token_pats:
+        for m in re.findall(tpat, up):
+            c = m
+            # 必要条件：长度>=4、含数字、非纯hex
+            if len(c) < 4:
+                continue
+            if not re.search(r'\d', c):
+                continue
+            if re.fullmatch(r'[0-9A-F]{6,}', c):
+                continue
+            if c not in codes:
+                codes.append(c)
     return codes
 
 
@@ -436,3 +445,177 @@ def filter_step_file(stp_path: str, model_codes: List[str],
     
     print(f"  STEP过滤完成: {len(needed_ids)} 实体 -> {os.path.getsize(output_path)} 字节")
     return output_path
+
+
+def filter_step_files(stp_paths: List[str], model_codes: List[str],
+                      output_path: str,
+                      component_counts: Dict[str, int] = None) -> str:
+    """从多个STEP库文件合并过滤，输出一个通用装配STEP
+
+    每个库独立解析、匹配同一批型号代码，收集匹配零件的几何实体。
+    各库实体ID通过全局偏移避免冲突，最终拼接成一个STEP文件。
+    这样任何项目都能从所有库里找到可用的零件，实现"通用库"。
+
+    Args:
+        stp_paths: 多个STEP库文件路径
+        model_codes: 型号代码列表
+        output_path: 输出STEP文件路径
+        component_counts: {型号代码: 数量}
+    """
+    if component_counts is None:
+        from collections import Counter
+        component_counts = dict(Counter(model_codes))
+
+    if not stp_paths:
+        raise ValueError("stp_paths为空")
+
+    header = None
+    global_offset = 0
+    all_data_lines = []
+    extra_refs = set()  # 跨库补充引用（在本库匹配集内需优先保留）
+    per_lib_entity_sets = []
+    # 已展开的型号（避免跨库重复）
+    expanded_codes = set()
+
+    for si, stp_path in enumerate(stp_paths):
+        if not os.path.exists(stp_path):
+            print(f"  WARNING: 库文件不存在，跳过: {stp_path}")
+            continue
+
+        entities = parse_step_file(stp_path)
+        reverse_graph = _build_reverse_graph(entities)
+
+        # 匹配型号
+        matched_product_ids = find_matching_products(entities, model_codes)
+
+        if matched_product_ids:
+            needed_ids = collect_geometry_for_instances(
+                entities, reverse_graph, matched_product_ids, component_counts
+            )
+        else:
+            print(f"  WARNING: 库 {os.path.basename(stp_path)} 没有匹配的PRODUCT")
+            needed_ids = set()
+
+        if not needed_ids:
+            continue
+
+        # 记录本库实体集（用于MDGPR引用过滤判断）
+        per_lib_entity_sets.append(set(needed_ids))
+        # 读取HEADER（取第一个有匹配的库）
+        if header is None:
+            with open(stp_path, 'r', encoding='utf-8', errors='ignore') as f:
+                original = f.read()
+            hm = re.search(r'(ISO-10303-21;.*?ENDSEC;)', original, re.DOTALL)
+            header = hm.group(1) if hm else 'ISO-10303-21;\nHEADER;\nENDSEC;'
+
+        # 本库的ID偏移：以本库最大实体ID + 1 作为本库内部offset基准
+        local_max = max(int(eid) for eid in entities.keys()) if entities else 0
+        offset = global_offset
+        global_offset += (local_max + 1)
+
+        sorted_ids = sorted(needed_ids, key=lambda x: int(x))
+        for eid in sorted_ids:
+            etype, line = entities[eid]
+
+            if etype == 'MECHANICAL_DESIGN_GEOMETRIC_PRESENTATION_REPRESENTATION':
+                # 只保留需要的引用
+                def filter_refs(m):
+                    ref_id = m.group(1)
+                    if int(ref_id) in needed_ids or (offset and False):
+                        return f'#{int(ref_id) + offset}'
+                    return ''
+                fl = re.sub(r'#(\d+)', filter_refs, line)
+                fl = re.sub(r',\s*,', ',', fl)
+                fl = re.sub(r'\(\s*,', '(', fl)
+                fl = re.sub(r',\s*\)', ')', fl)
+                if fl.strip():
+                    all_data_lines.append(fl)
+            else:
+                # 把实体定义行开头 #id= 重写，并重写行内引用
+                rewritten = _rewrite_offset(line, offset)
+                all_data_lines.append(rewritten)
+
+        # ---- 实例展开：让STP中每个型号的NAU实例数与物料数量一一对应 ----
+        # 用本库匹配到的型号生成 N 个NAU（命名 型号:1..N，引用本库几何，引用ID加offset），
+        # 让 8A(81个PLMV-K16) 与 8A测试(80个) 的STP体现真实数量差异。
+        for code, need in sorted(component_counts.items(), key=lambda x: x[0]):
+            if code in expanded_codes:
+                continue
+            nau_refs = _find_nau_for_code(entities, reverse_graph, code)
+            if not nau_refs:
+                continue
+            root_pd, child_pd = nau_refs
+            need = max(1, int(need))
+            ref_root = f'#{int(root_pd) + offset}'
+            ref_child = f'#{int(child_pd) + offset}'
+            for i in range(1, need + 1):
+                inst_name = f"{code}:{i}"
+                line = (f"#{global_offset + i}=NEXT_ASSEMBLY_USAGE_OCCURRENCE("
+                        f"'{_esc(inst_name)}','{_esc(inst_name)}','{_esc(inst_name)}',"
+                        f"{ref_root},{ref_child},'{_esc(inst_name)}');")
+                all_data_lines.append(line)
+                extra_refs.add(inst_name)
+            expanded_codes.add(code)
+            print(f"  [库{si}] 实例展开 {code}: {need} 个NAU")
+            global_offset += (need + 1)
+
+        print(f"  [库{si}] {os.path.basename(stp_path)}: 偏移+{offset}, 收集 {len(needed_ids)} 实体")
+
+    if header is None:
+        header = 'ISO-10303-21;\nHEADER;\nENDSEC;'
+
+    # 写合并STP
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write(header)
+        f.write('\nDATA;\n')
+        for line in all_data_lines:
+            f.write(line + '\n')
+        f.write('ENDSEC;\nEND-ISO-10303-21;\n')
+
+    print(f"  多库合并过滤完成: {len(all_data_lines)} 实体 -> {os.path.getsize(output_path)} 字节")
+    return output_path
+
+
+def _rewrite_offset(line: str, offset: int) -> str:
+    """重写STEP实体行：所有 #数字（含定义ID和引用）统一加偏移。
+    一次 re.sub 同时处理定义行首和行内引用，不会重复加——
+    re.sub 对每个匹配只替换一次。
+    """
+    if offset == 0:
+        return line
+    return re.sub(r'#(\d+)', lambda m: f'#{int(m.group(1)) + offset}', line)
+
+
+def _esc(s: str) -> str:
+    """STEP字符串转义"""
+    return s.replace("'", "''")
+
+
+def _find_nau_for_code(entities: Dict, reverse_graph: Dict, code: str):
+    """找到某型号代码在库中NAU的 (root_pd, child_pd) 引用ID
+
+    通过匹配 PRODUCT 名称里的型号代码 -> 反查 PD -> 找引用该PD的NAU，
+    取其 parent为root_pd、child为child_pd。返回 (root_pd, child_pd)；找不到返回None。
+    """
+    pd_to_product = _build_pd_to_product_map(entities, reverse_graph)
+    code_up = code.upper()
+
+    # 该型号对应的 PD
+    target_pd = None
+    for pd_id, (prod_id, prod_name) in pd_to_product.items():
+        if code_up in (prod_name or '').upper():
+            target_pd = pd_id
+            break
+    if not target_pd:
+        return None
+
+    # 找引用该PD作为child的NAU，取其 (root_pd, child_pd)
+    for eid, (et, line) in entities.items():
+        if et != 'NEXT_ASSEMBLY_USAGE_OCCURRENCE':
+            continue
+        refs = _extract_refs(line)
+        if target_pd in refs:
+            root_pd = refs[1] if len(refs) > 1 else target_pd
+            child_pd = refs[2] if len(refs) > 2 else target_pd
+            return (root_pd, child_pd)
+    return None

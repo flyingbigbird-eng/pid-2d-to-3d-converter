@@ -193,14 +193,14 @@ def api_generate():
         output_dir = os.path.join(OUTPUT_DIR, project_name)
 
         # 查找STEP零件库路径
+        # 通用库方案：data/library 目录下的所有stp库文件合并为一个通用零件库，
+        # 任何项目都从所有库里匹配需要的型号，不按项目区分库。
         step_lib_path = ""
-        # 1. 先查通用器件库目录 data/library
-        if os.path.exists(LIBRARY_DIR):
-            for f in os.listdir(LIBRARY_DIR):
-                if f.lower().endswith(('.stp', '.step')):
-                    step_lib_path = os.path.join(LIBRARY_DIR, f)
-                    break
-        # 2. 没有通用器件库就从知识文件中查找案例的STEP路径
+        if os.path.exists(LIBRARY_DIR) and any(
+                f.lower().endswith(('.stp', '.step')) for f in os.listdir(LIBRARY_DIR)):
+            # 传目录作为一个通用库，generate_assembly内部会扫描目录下所有stp合并匹配
+            step_lib_path = LIBRARY_DIR
+        # 2. 目录为空就从知识文件中查找案例的STEP路径
         if not step_lib_path:
             for k in knowledge_list:
                 # 知识文件在 KNOWLEDGE_DIR 目录
@@ -363,4 +363,6 @@ if __name__ == "__main__":
     print("  学习阶段：上传 2D(DXF) + 点料表(xls) + 3D参考文件")
     print("  使用阶段：上传 2D(DXF) + 点料表(xls) -> 生成 3D")
     print("=" * 60)
-    app.run(host="0.0.0.0", port=5173, debug=True, use_reloader=False)
+    import os as _os
+    _port = int(_os.environ.get("PID3D_PORT", "5173"))
+    app.run(host="0.0.0.0", port=_port, debug=True, use_reloader=False)

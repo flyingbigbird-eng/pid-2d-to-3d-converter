@@ -103,10 +103,21 @@ def generate_assembly(match_result: MatchResult, output_dir: str = "",
     scene = trimesh.Scene()
     parts = []
 
-    # 加载STEP零件库
+    # 归一化STEP零件库路径 -> 库文件列表（支持传入单个文件、目录、或列表，实现通用库）
+    step_paths = []
+    if step_library_path:
+        if isinstance(step_library_path, (list, tuple)):
+            step_paths = [p for p in step_library_path if os.path.exists(p)]
+        elif os.path.isdir(step_library_path):
+            step_paths = [os.path.join(step_library_path, f) for f in os.listdir(step_library_path)
+                          if f.lower().endswith(('.stp', '.step'))]
+        elif os.path.isfile(step_library_path):
+            step_paths = [step_library_path]
+
+    # 加载STEP零件库（多库合并加载）
     step_parts = {}
-    if step_library_path and os.path.exists(step_library_path):
-        step_parts = _load_step_library(step_library_path)
+    if step_paths:
+        step_parts = _load_step_library(step_paths)
 
     # 1. 生成壳体（底盘）
     shell_mesh = _create_shell(match_result)
@@ -248,11 +259,12 @@ def generate_assembly(match_result: MatchResult, output_dir: str = "",
         except Exception:
             pass
 
-        # 导出STEP: 根据实际匹配的组件，从原始STEP库中筛选对应零件
+        # 导出STEP: 从STEP库中筛选对应零件（支持多个库合并匹配，实现通用库）
         step_out = os.path.join(output_dir, "assembly.stp")
         try:
-            if step_library_path and os.path.exists(step_library_path):
+            if step_paths:
                 # 从匹配的组件中提取型号代码和数量
+                # 数量 = 点料表物料数量（STP与物料一一对应），而非PID组件数
                 from .step_filter import extract_model_codes
                 model_codes = []
                 code_counts = {}
@@ -263,15 +275,16 @@ def generate_assembly(match_result: MatchResult, output_dir: str = "",
                         if mat.category in ("valve", "fitting", "sensor"):
                             codes = extract_model_codes(mat.spec, mat.name)
                             if codes:
-                                # 取第一个型号代码
                                 code = codes[0]
-                                model_codes.append(code)
-                                code_counts[code] = code_counts.get(code, 0) + 1
+                                if code not in model_codes:
+                                    model_codes.append(code)
+                                # 累加点料表数量（同一型号可能在多个组件中复用）
+                                code_counts[code] = code_counts.get(code, 0) + float(mat.quantity or 0)
                 
                 if model_codes:
-                    print(f"STEP导出: 型号代码={model_codes}, 数量={code_counts}")
-                    from .step_filter import filter_step_file
-                    filter_step_file(step_library_path, model_codes, step_out, code_counts)
+                    print(f"STEP导出: 型号代码={model_codes}, 数量={code_counts}, 库={step_paths}")
+                    from .step_filter import filter_step_files
+                    filter_step_files(step_paths, model_codes, step_out, code_counts)
                 else:
                     print("STEP导出: 未提取到型号代码，回退到STL")
                     if result.combined_mesh:
@@ -469,23 +482,26 @@ def _create_pipe_mesh(pipe: MatchedPipe) -> Optional[trimesh.Trimesh]:
 
 # ============= STEP零件库加载 =============
 
-def _load_step_library(path: str) -> dict:
+def _load_step_library(path) -> dict:
     """加载STEP零件库，返回 {零件名: Trimesh} 字典
-    
-    path可以是单个stp文件或包含stp文件的目录。
+
+    path可以是单个stp文件、包含stp文件的目录、或stp文件列表（多库通用）。
     STEP文件中可能包含多个几何体，每个SOLID作为一个零件。
     """
     parts = {}
 
-    # 收集所有stp文件
-    stp_files = []
-    if os.path.isfile(path) and path.lower().endswith(('.stp', '.step')):
-        stp_files.append(path)
-    elif os.path.isdir(path):
-        for root, dirs, files in os.walk(path):
-            for f in files:
-                if f.lower().endswith(('.stp', '.step')):
-                    stp_files.append(os.path.join(root, f))
+    # 归一化为文件列表
+    if isinstance(path, (list, tuple)):
+        stp_files = list(path)
+    else:
+        stp_files = []
+        if os.path.isfile(path) and path.lower().endswith(('.stp', '.step')):
+            stp_files.append(path)
+        elif os.path.isdir(path):
+            for root, dirs, files in os.walk(path):
+                for f in files:
+                    if f.lower().endswith(('.stp', '.step')):
+                        stp_files.append(os.path.join(root, f))
 
     for stp_path in stp_files:
         try:
