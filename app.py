@@ -34,6 +34,7 @@ LIBRARY_DIR = os.path.join(DATA_DIR, "library")
 KNOWLEDGE_DIR = os.path.join(DATA_DIR, "knowledge")
 OUTPUT_DIR = os.path.join(DATA_DIR, "output")
 UPLOAD_DIR = os.path.join(DATA_DIR, "uploads")
+EXCLUDE_RULES_FILE = os.path.join(DATA_DIR, "exclude_rules.json")
 
 for d in [CASES_DIR, LIBRARY_DIR, KNOWLEDGE_DIR, OUTPUT_DIR, UPLOAD_DIR]:
     os.makedirs(d, exist_ok=True)
@@ -349,6 +350,168 @@ def api_parse_preview():
             "pid": pid.to_dict(),
             "bom": bom.to_dict(),
             "match_result": match_result.to_dict(),
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+# ============= 不进三维物料规则管理 =============
+
+def _load_exclude_rules():
+    """加载不进三维物料规则"""
+    if not os.path.exists(EXCLUDE_RULES_FILE):
+        return []
+    try:
+        with open(EXCLUDE_RULES_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except (json.JSONDecodeError, IOError):
+        return []
+
+
+def _save_exclude_rules(rules):
+    """保存不进三维物料规则"""
+    with open(EXCLUDE_RULES_FILE, 'w', encoding='utf-8') as f:
+        json.dump(rules, f, ensure_ascii=False, indent=2)
+
+
+@app.route("/api/exclude-rules", methods=["GET"])
+def api_get_exclude_rules():
+    """查看不进三维物料规则列表"""
+    rules = _load_exclude_rules()
+    return jsonify({"count": len(rules), "rules": rules})
+
+
+@app.route("/api/exclude-rules", methods=["POST"])
+def api_save_exclude_rules():
+    """新增或修改不进三维物料规则"""
+    try:
+        data = request.get_json(force=True)
+    except Exception:
+        return jsonify({"error": "请求格式错误，需要JSON"}), 400
+
+    rule_id = data.get("id", "")
+
+    rules = _load_exclude_rules()
+
+    if rule_id:
+        # 修改已有规则
+        found = False
+        for r in rules:
+            if r.get("id") == rule_id:
+                r["category"] = data.get("category", r.get("category", ""))
+                r["keyword"] = data.get("keyword", r.get("keyword", ""))
+                r["reason"] = data.get("reason", r.get("reason", ""))
+                r["confirmed"] = data.get("confirmed", r.get("confirmed", False))
+                r["updated_at"] = data.get("updated_at", r.get("updated_at", ""))
+                found = True
+                break
+        if not found:
+            return jsonify({"error": f"未找到规则 {rule_id}"}), 404
+    else:
+        # 新增规则
+        import time
+        new_id = f"r{int(time.time() * 1000)}"
+        today = time.strftime("%Y-%m-%d")
+        rules.append({
+            "id": new_id,
+            "category": data.get("category", ""),
+            "keyword": data.get("keyword", ""),
+            "reason": data.get("reason", ""),
+            "confirmed": data.get("confirmed", False),
+            "created_at": today,
+            "updated_at": today,
+        })
+
+    _save_exclude_rules(rules)
+    return jsonify({"status": "success", "count": len(rules)})
+
+
+@app.route("/api/exclude-rules/<rule_id>", methods=["DELETE"])
+def api_delete_exclude_rule(rule_id):
+    """删除不进三维物料规则"""
+    rules = _load_exclude_rules()
+    new_rules = [r for r in rules if r.get("id") != rule_id]
+    if len(new_rules) == len(rules):
+        return jsonify({"error": f"未找到规则 {rule_id}"}), 404
+    _save_exclude_rules(new_rules)
+    return jsonify({"status": "success", "count": len(new_rules)})
+
+
+@app.route("/api/exclude-rules/import", methods=["POST"])
+def api_import_exclude_rules():
+    """批量导入规则（替换现有全部规则）"""
+    try:
+        data = request.get_json(force=True)
+        rules = data.get("rules", [])
+    except Exception:
+        return jsonify({"error": "请求格式错误，需要JSON"}), 400
+
+    if not isinstance(rules, list):
+        return jsonify({"error": "rules 必须是数组"}), 400
+
+    _save_exclude_rules(rules)
+    return jsonify({"status": "success", "count": len(rules)})
+
+
+@app.route("/api/exclude-rules/preview", methods=["POST"])
+def api_preview_exclude_match():
+    """预览：按当前规则筛选点料表物料，显示哪些会被标记为'不进三维'
+    
+    请求：multipart/form-data，上传 bom_file (点料表) 和 rule_ids (要预览的规则ID列表)
+    """
+    try:
+        # 获取规则IDs（form字段中传JSON数组）
+        rule_ids_raw = request.form.get("rule_ids", "[]")
+        try:
+            rule_ids = json.loads(rule_ids_raw)
+        except json.JSONDecodeError:
+            rule_ids = []
+        
+        # 加载规则
+        all_rules = _load_exclude_rules()
+        if rule_ids:
+            rules = [r for r in all_rules if r.get("id") in rule_ids]
+        else:
+            rules = all_rules
+
+        # 如果有bom文件，解析并匹配
+        bom_file = request.files.get("bom_file")
+        if not bom_file:
+            return jsonify({"rules": rules, "matches": []})
+
+        tmpdir = tempfile.mkdtemp()
+        bom_path = os.path.join(tmpdir, bom_file.filename)
+        _safe_save(bom_file, bom_path)
+
+        bom = parse_bom(bom_path)
+
+        # 按规则匹配物料
+        matches = []
+        for mat in bom.all_materials:
+            name = mat.name or ""
+            matched_rules = []
+            for r in rules:
+                kw = r.get("keyword", "")
+                if kw and kw in name:
+                    matched_rules.append(r.get("id"))
+            if matched_rules:
+                matches.append({
+                    "name": mat.name,
+                    "spec": mat.spec,
+                    "category": mat.category,
+                    "qty": mat.quantity,
+                    "u9": mat.k3_code,
+                    "matched_rules": matched_rules,
+                })
+
+        return jsonify({
+            "rules": rules,
+            "total_materials": len(bom.all_materials),
+            "match_count": len(matches),
+            "matches": matches,
         })
 
     except Exception as e:

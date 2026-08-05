@@ -151,6 +151,7 @@
             <button class="nav-btn active" onclick="switchMode('generate')">生成3D</button>
             <button class="nav-btn" onclick="switchMode('learn')">学习案例</button>
             <button class="nav-btn" onclick="switchMode('knowledge')">已学知识</button>
+            <button class="nav-btn" onclick="switchMode('exclude')">不进三维规则</button>
         </div>
     </div>
 
@@ -351,14 +352,53 @@
             </div>
         </div>
 
-        <!-- ============ 知识库 ============ -->
-        <div id="mode-knowledge" class="tab-content">
+        <!-- ============ 不进三维规则 ============ -->
+        <div id="mode-exclude" class="tab-content">
             <div class="card">
-                <div class="card-title">已学知识库</div>
-                <button class="btn btn-primary" onclick="loadKnowledge()" style="margin-bottom:16px;">刷新</button>
-                <div id="knowledge-content">
-                    <p style="color:#999;">点击刷新查看已学习的知识</p>
+                <div class="card-title">
+                    不进三维物料规则
+                    <span class="badge">管理</span>
                 </div>
+                <p style="margin-bottom:12px; color:#666; font-size:14px;">
+                    定义哪些物料<b>不需要</b>在三维模型中体现。生成时会自动跳过匹配这些规则的物料。<br>
+                    所有规则状态为 <b style="color:#f90;">⚠ 待确认</b>，确认后将生效。
+                </p>
+                <div style="display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap; align-items:center;">
+                    <button class="btn btn-primary" onclick="showAddRuleDialog()">➕ 新增规则</button>
+                    <button class="btn" style="background:#ff9800;color:#fff;" onclick="batchConfirmRules()">✅ 批量确认</button>
+                    <span style="font-size:12px; color:#888;" id="exclude-summary"></span>
+                </div>
+                <table id="exclude-rules-table">
+                    <thead>
+                        <tr>
+                            <th style="width:50px;">状态</th>
+                            <th>类别</th>
+                            <th>关键词</th>
+                            <th>不进三维原因</th>
+                            <th style="width:120px;">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <!-- 预览匹配 -->
+            <div class="card">
+                <div class="card-title">预览匹配效果</div>
+                <p style="margin-bottom:8px; color:#666; font-size:14px;">
+                    上传一份点料表，按当前规则预览哪些物料会被标记为「不进三维」。
+                </p>
+                <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+                    <div class="upload-area" id="exclude-bom-area" style="padding:12px 24px; text-align:left; display:inline-flex; align-items:center; gap:8px;"
+                         onclick="document.getElementById('exclude-bom-input').click()">
+                        <span style="font-size:20px;">📊</span>
+                        <span class="text">上传点料表预览</span>
+                        <input type="file" id="exclude-bom-input" accept=".xls,.xlsx" style="display:none;">
+                    </div>
+                    <button class="btn btn-primary" onclick="previewExcludeMatches()">🔍 预览</button>
+                </div>
+                <div class="file-list" id="exclude-bom-list"></div>
+                <div id="exclude-preview-result" style="margin-top:12px;"></div>
             </div>
         </div>
     </div>
@@ -392,6 +432,7 @@
             document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
             event.target.classList.add('active');
             if (mode === 'knowledge') loadKnowledge();
+            if (mode === 'exclude') loadExcludeRules();
         }
 
         // ============ 文件上传 ============
@@ -860,6 +901,220 @@
                 content.innerHTML = html;
             } catch (e) {
                 alert('加载失败: ' + e.message);
+            }
+        }
+
+        // ============ 不进三维规则管理 ============
+        let excludeRulesCache = [];
+        let excludeBomFile = null;
+
+        // 上传点料表用于预览
+        (function() {
+            const input = document.getElementById('exclude-bom-input');
+            const list = document.getElementById('exclude-bom-list');
+            const area = document.getElementById('exclude-bom-area');
+            input.addEventListener('change', function() {
+                if (this.files[0]) {
+                    excludeBomFile = this.files[0];
+                    list.innerHTML = `<div class="file-item">\u{1f4c4} ${this.files[0].name} <span class="remove" onclick="excludeBomFile=null; document.getElementById('exclude-bom-list').innerHTML=''; this.value=''">\u2715</span></div>`;
+                }
+            });
+            area.addEventListener('dragover', e => { e.preventDefault(); area.classList.add('dragover'); });
+            area.addEventListener('dragleave', e => { area.classList.remove('dragover'); });
+            area.addEventListener('drop', e => {
+                e.preventDefault(); area.classList.remove('dragover');
+                input.files = e.dataTransfer.files;
+                input.dispatchEvent(new Event('change'));
+            });
+        })();
+
+        async function loadExcludeRules() {
+            try {
+                const resp = await fetch(`${API_BASE}/api/exclude-rules`);
+                const data = await resp.json();
+                excludeRulesCache = data.rules || [];
+                renderExcludeRules();
+            } catch (e) {
+                alert('加载规则失败: ' + e.message);
+            }
+        }
+
+        function renderExcludeRules() {
+            const tbody = document.querySelector('#exclude-rules-table tbody');
+            const summary = document.getElementById('exclude-summary');
+            const rules = excludeRulesCache;
+            const confirmed = rules.filter(r => r.confirmed).length;
+
+            summary.textContent = `共 ${rules.length} 条规则，${confirmed} 条已确认，${rules.length - confirmed} 条待确认`;
+
+            if (rules.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#999;padding:24px;">暂无规则，点击「+ 新增规则」添加</td></tr>';
+                return;
+            }
+
+            let html = '';
+            for (const r of rules) {
+                const statusIcon = r.confirmed ? '\u2705' : '\u26a0\ufe0f';
+                const statusColor = r.confirmed ? '#4caf50' : '#ff9800';
+                const statusText = r.confirmed ? '已确认' : '待确认';
+                html += `
+                    <tr>
+                        <td style="color:${statusColor}; text-align:center; font-size:16px;" title="${statusText}">${statusIcon}</td>
+                        <td>${r.category || '-'}</td>
+                        <td><code style="background:#f5f5f5; padding:2px 6px; border-radius:3px;">${r.keyword || '-'}</code></td>
+                        <td style="font-size:13px;">${r.reason || '-'}</td>
+                        <td>
+                            <button class="btn" style="padding:4px 10px; font-size:12px; background:#e3f2fd; color:#1565c0; margin-right:4px;"
+                                    onclick="showEditRuleDialog('${r.id}')">\u270f\ufe0f 编辑</button>
+                            <button class="btn" style="padding:4px 10px; font-size:12px; background:#ffebee; color:#c62828;"
+                                    onclick="deleteExcludeRule('${r.id}')">\ud83d\uddd1\ufe0f</button>
+                        </td>
+                    </tr>`;
+            }
+            tbody.innerHTML = html;
+        }
+
+        function showAddRuleDialog() {
+            const category = prompt('请输入物料类别\n（如：accessory/other/sensor/fitting/valve）', '');
+            if (category === null) return;
+            const keyword = prompt('请输入匹配关键词\n（如：气管/滤芯/压力表，匹配物料名称中包含此词的）', '');
+            if (keyword === null) return;
+            const reason = prompt('请输入不进三维的原因', '');
+            if (reason === null) return;
+
+            saveExcludeRule({ category, keyword, reason });
+        }
+
+        function showEditRuleDialog(ruleId) {
+            const rule = excludeRulesCache.find(r => r.id === ruleId);
+            if (!rule) return;
+
+            const category = prompt('修改物料类别', rule.category || '');
+            if (category === null) return;
+            const keyword = prompt('修改关键词', rule.keyword || '');
+            if (keyword === null) return;
+            const reason = prompt('修改原因', rule.reason || '');
+            if (reason === null) return;
+
+            saveExcludeRule({ id: ruleId, category, keyword, reason });
+        }
+
+        async function saveExcludeRule(ruleData) {
+            try {
+                const resp = await fetch(`${API_BASE}/api/exclude-rules`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(ruleData),
+                });
+                const data = await resp.json();
+                if (data.error) { alert(data.error); return; }
+                await loadExcludeRules();
+            } catch (e) {
+                alert('保存失败: ' + e.message);
+            }
+        }
+
+        async function deleteExcludeRule(ruleId) {
+            if (!confirm('确定删除这条规则吗？')) return;
+            try {
+                const resp = await fetch(`${API_BASE}/api/exclude-rules/${ruleId}`, { method: 'DELETE' });
+                const data = await resp.json();
+                if (data.error) { alert(data.error); return; }
+                await loadExcludeRules();
+            } catch (e) {
+                alert('删除失败: ' + e.message);
+            }
+        }
+
+        async function batchConfirmRules() {
+            const unconfirmed = excludeRulesCache.filter(r => !r.confirmed);
+            if (unconfirmed.length === 0) {
+                alert('所有规则已确认');
+                return;
+            }
+            if (!confirm(`确定确认全部 ${unconfirmed.length} 条待确认规则吗？确认后这些规则将在生成时生效。`)) return;
+
+            let allOk = true;
+            for (const r of unconfirmed) {
+                try {
+                    const resp = await fetch(`${API_BASE}/api/exclude-rules`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            id: r.id,
+                            category: r.category,
+                            keyword: r.keyword,
+                            reason: r.reason,
+                            confirmed: true,
+                            updated_at: new Date().toISOString().slice(0, 10),
+                        }),
+                    });
+                    const data = await resp.json();
+                    if (data.error) allOk = false;
+                } catch (e) {
+                    allOk = false;
+                }
+            }
+            if (allOk) {
+                alert(`\u2705 已确认 ${unconfirmed.length} 条规则`);
+            } else {
+                alert('部分规则确认失败，请刷新后重试');
+            }
+            await loadExcludeRules();
+        }
+
+        async function previewExcludeMatches() {
+            if (!excludeBomFile) {
+                alert('请先上传点料表文件');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('bom_file', excludeBomFile);
+
+            const resultDiv = document.getElementById('exclude-preview-result');
+            resultDiv.innerHTML = '<div class="loading show"><div class="spinner"></div><p>正在分析...</p></div>';
+
+            try {
+                const resp = await fetch(`${API_BASE}/api/exclude-rules/preview`, {
+                    method: 'POST',
+                    body: formData,
+                });
+                const data = await resp.json();
+                if (data.error) {
+                    resultDiv.innerHTML = `<div class="alert alert-error">\u274c ${data.error}</div>`;
+                    return;
+                }
+
+                const matches = data.matches || [];
+                if (matches.length === 0) {
+                    resultDiv.innerHTML = `<div class="alert alert-info">\ud83d\udccb 当前点料表中没有物料匹配现有规则（共 ${data.total_materials || 0} 条物料）</div>`;
+                    return;
+                }
+
+                let html = `<div class="alert alert-info" style="margin-bottom:12px;">
+                    \ud83d\udccb 共 ${data.total_materials || 0} 条物料，<b style="color:#f44336;">${matches.length} 条</b> 匹配不进三维规则
+                </div>`;
+                html += '<table><thead><tr><th>物料名称</th><th>规格</th><th>类别</th><th>数量</th><th>匹配规则</th></tr></thead><tbody>';
+
+                for (const m of matches) {
+                    const ruleNames = (m.matched_rules || []).map(rid => {
+                        const r = excludeRulesCache.find(rr => rr.id === rid);
+                        return r ? r.keyword : rid;
+                    }).join(', ');
+                    html += `
+                        <tr style="background:#fff3e0;">
+                            <td style="color:#e65100;">${m.name}</td>
+                            <td style="font-size:12px;">${(m.spec || '').slice(0, 30)}</td>
+                            <td>${m.category || '-'}</td>
+                            <td>${m.qty ?? '-'}</td>
+                            <td style="font-size:12px;">${ruleNames}</td>
+                        </tr>`;
+                }
+                html += '</tbody></table>';
+                resultDiv.innerHTML = html;
+            } catch (e) {
+                resultDiv.innerHTML = `<div class="alert alert-error">\u274c 预览失败: ${e.message}</div>`;
             }
         }
     </script>

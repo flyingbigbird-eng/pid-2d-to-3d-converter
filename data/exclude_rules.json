@@ -1,0 +1,92 @@
+[
+  {
+    "id": "r1",
+    "category": "accessory",
+    "keyword": "气管",
+    "reason": "气管材料不会在三维体现（客户纪要明确）",
+    "confirmed": false,
+    "created_at": "2026-08-05",
+    "updated_at": "2026-08-05"
+  },
+  {
+    "id": "r2",
+    "category": "accessory",
+    "keyword": "波纹软管",
+    "reason": "软管类不会在三维体现",
+    "confirmed": false,
+    "created_at": "2026-08-05",
+    "updated_at": "2026-08-05"
+  },
+  {
+    "id": "r3",
+    "category": "accessory",
+    "keyword": "泵气管",
+    "reason": "气管材料不会在三维体现",
+    "confirmed": false,
+    "created_at": "2026-08-05",
+    "updated_at": "2026-08-05"
+  },
+  {
+    "id": "r4",
+    "category": "other",
+    "keyword": "滤芯",
+    "reason": "耗材类，无独立三维几何",
+    "confirmed": false,
+    "created_at": "2026-08-05",
+    "updated_at": "2026-08-05"
+  },
+  {
+    "id": "r5",
+    "category": "other",
+    "keyword": "滤壳",
+    "reason": "耗材类，无独立三维几何",
+    "confirmed": false,
+    "created_at": "2026-08-05",
+    "updated_at": "2026-08-05"
+  },
+  {
+    "id": "r6",
+    "category": "other",
+    "keyword": "标签",
+    "reason": "标识类，无独立三维几何",
+    "confirmed": false,
+    "created_at": "2026-08-05",
+    "updated_at": "2026-08-05"
+  },
+  {
+    "id": "r7",
+    "category": "other",
+    "keyword": "密封圈",
+    "reason": "辅助密封件，不单独建模",
+    "confirmed": false,
+    "created_at": "2026-08-05",
+    "updated_at": "2026-08-05"
+  },
+  {
+    "id": "r8",
+    "category": "other",
+    "keyword": "防火泥",
+    "reason": "耗材类，无独立三维几何",
+    "confirmed": false,
+    "created_at": "2026-08-05",
+    "updated_at": "2026-08-05"
+  },
+  {
+    "id": "r9",
+    "category": "sensor",
+    "keyword": "压力表",
+    "reason": "已通过PID组件体现，点料表独有仪表不进三维",
+    "confirmed": false,
+    "created_at": "2026-08-05",
+    "updated_at": "2026-08-05"
+  },
+  {
+    "id": "r10",
+    "category": "sensor",
+    "keyword": "判位传感器",
+    "reason": "点料表独有不进三维",
+    "confirmed": false,
+    "created_at": "2026-08-05",
+    "updated_at": "2026-08-05"
+  }
+]
