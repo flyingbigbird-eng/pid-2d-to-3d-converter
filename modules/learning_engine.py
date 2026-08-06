@@ -547,6 +547,31 @@ def _build_bom_library_models(bom, knowledge_list: list) -> list:
                 pid_to_model.setdefault(pid_key, model)
 
     from .step_filter import extract_model_codes
+    import os
+    import glob
+
+    # 动态扫描STP库（绕过旧知识库缺少stp_models的问题）
+    stp_models = {}
+    lib_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'library')
+    if os.path.exists(lib_dir):
+        for stp_file in glob.glob(os.path.join(lib_dir, '*.stp')) + glob.glob(os.path.join(lib_dir, '*.STP')):
+            try:
+                from .step_filter import parse_step_file
+                entities = parse_step_file(stp_file)
+                for eid, (etype, line) in entities.items():
+                    if etype != 'PRODUCT':
+                        continue
+                    import re
+                    name_matches = re.findall(r"'([^']*)'", line)
+                    for nm in name_matches:
+                        decoded = _decode_step_name(nm)
+                        code = _extract_step_model_code(decoded)
+                        if code:
+                            stp_models.setdefault(code, [])
+                            if stp_file not in stp_models[code]:
+                                stp_models[code].append(stp_file)
+            except Exception:
+                pass
     from .bom_parser import BOMDocument
 
     results = []
@@ -578,6 +603,16 @@ def _build_bom_library_models(bom, knowledge_list: list) -> list:
                             break
                     if model:
                         break
+
+        # 3) 终极兜底：直接用spec型号匹配STP库型号（绕过旧知识库缺失问题）
+        if not matched_source and stp_models:
+            codes = extract_model_codes(mat.spec, mat.name)
+            for c in codes:
+                c_up = c.upper()
+                if c_up in stp_models:
+                    model = c_up
+                    matched_source = "library"
+                    break
 
         results.append({
             "u9": u9,
