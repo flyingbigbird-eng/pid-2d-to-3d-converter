@@ -435,6 +435,9 @@
             if (mode === 'exclude') loadExcludeRules();
         }
 
+        // 页面加载时预加载知识数据
+        setTimeout(() => loadKnowledge(), 500);
+
         // ============ 文件上传 ============
         function setupUpload(areaId, inputId, listId) {
             const area = document.getElementById(areaId);
