@@ -1,0 +1,84 @@
+' Inventor VBA宏：批量转换.ipt为.stp
+' 使用方法：
+' 1. 打开Inventor
+' 2. 按Alt+F11打开VBA编辑器
+' 3. 插入新模块，粘贴此代码
+' 4. 修改源目录和目标目录路径
+' 5. 运行ConvertAllIPT
+
+Sub ConvertAllIPT()
+    ' ========== 配置路径 ==========
+    Dim sourceDir As String
+    Dim targetDir As String
+    
+    ' 修改为你的实际路径
+    sourceDir = "E:\data\23D转换\VMB素材\VMB素材\VMB-8A-模型库\"
+    targetDir = "E:\data\23D转换\VMB素材\VMB素材\VMB-8A-模型库-STP\"
+    ' ==============================
+    
+    ' 创建目标目录
+    If Dir(targetDir, vbDirectory) = "" Then
+        MkDir targetDir
+    End If
+    
+    Dim oApp As Inventor.Application
+    Dim oDoc As Inventor.Document
+    Dim oFile As String
+    Dim count As Integer
+    
+    Set oApp = ThisApplication
+    count = 0
+    
+    ' 遍历源目录中的所有.ipt文件
+    oFile = Dir(sourceDir & "*.ipt")
+    
+    While oFile <> ""
+        On Error Resume Next
+        
+        ' 打开.ipt文件
+        Set oDoc = oApp.Documents.Open(sourceDir & oFile, False)
+        
+        If Not oDoc Is Nothing Then
+            ' 构建输出路径（保持原文件名，改扩展名为.stp）
+            Dim outFile As String
+            outFile = targetDir & Left(oFile, Len(oFile) - 4) & ".stp"
+            
+            ' 导出为STEP
+            Dim oSTEPTranslator As TranslatorAddIn
+            Set oSTEPTranslator = oApp.ApplicationAddIns.ItemById("{90AF0F18-EB1F-42C6-A3B3-F39F357A0FF4}")
+            
+            If Not oSTEPTranslator Is Nothing Then
+                Dim oContext As TranslationContext
+                Set oContext = oApp.TransientObjects.CreateTranslationContext
+                oContext.Type = kFileBrowseIOTarget
+                
+                Dim oOptions As NameValueMap
+                Set oOptions = oApp.TransientObjects.CreateNameValueMap
+                
+                ' STEP导出选项
+                oOptions.value("ExportAssembly") = False
+                oOptions.value("ExportAll") = True
+                oOptions.value("AP") = 203  ' STEP AP203格式
+                
+                Dim oData As DataMedium
+                Set oData = oApp.TransientObjects.CreateDataMedium
+                oData.FileName = outFile
+                
+                ' 执行转换
+                If oSTEPTranslator.HasSaveCopyOfOptions(oDoc, oContext, oOptions) Then
+                    Call oSTEPTranslator.SaveCopyOf(oDoc, oContext, oOptions, oData)
+                    count = count + 1
+                    Debug.Print "转换成功: " & oFile & " -> " & outFile
+                End If
+            End If
+            
+            ' 关闭文档
+            oDoc.Close True
+        End If
+        
+        ' 下一个文件
+        oFile = Dir
+    Wend
+    
+    MsgBox "转换完成！共转换 " & count & " 个文件", vbInformation
+End Sub

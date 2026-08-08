@@ -502,6 +502,79 @@ def load_knowledge(knowledge_dir: str) -> list:
     return knowledge_list
 
 
+def _enhance_with_vmb8a_mapping(result: MatchResult, pid: PIDDiagram):
+    """
+    使用VMB-8A三层映射增强匹配结果
+
+    映射链路：PID组件类型/管径 -> 型号代码 -> U9码 -> STP零件
+    """
+    # 加载VMB-8A完整映射
+    import json
+    vmb8a_mapping_path = os.path.join(KNOWLEDGE_DIR, "VMB-8A_complete_mapping.json")
+
+    if not os.path.exists(vmb8a_mapping_path):
+        return  # 没有VMB-8A映射数据，跳过
+
+    try:
+        with open(vmb8a_mapping_path, 'r', encoding='utf-8') as f:
+            vmb8a_data = json.load(f)
+    except:
+        return
+
+    pid_to_model = vmb8a_data.get('pid_to_model', {})
+    u9_to_stp = vmb8a_data.get('u9_to_stp', {})
+
+    # PID类型到中文类型映射
+    pid_type_map = {
+        'AV': '气动隔膜阀',
+        'MV': '手动隔膜阀',
+        'DBV': '隔膜阀',
+        'PIPE': '管道'
+    }
+
+    # 管径标准化规则
+    size_map = {
+        '1/4"': '14',
+        '1/2"': '12',
+        '3/4"': '34',
+        '1"': '1'
+    }
+
+    # 遍历已匹配的组件，尝试用U9码增强
+    for comp in result.components:
+        if not comp.matched_material:
+            continue
+
+        # 构建型号代码
+        pid_type = comp.pid_type
+        pipe_size = comp.pid_pipe_size
+
+        comp_type = pid_type_map.get(pid_type, '')
+        size_abbr = size_map.get(pipe_size, pipe_size.replace('/', '').replace('"', ''))
+
+        if not comp_type or not size_abbr:
+            continue
+
+        model_code = f"{comp_type} {size_abbr}"
+
+        # 查找U9码
+        u9_code = None
+        for pid_name, info in pid_to_model.items():
+            if info.get('model_code') == model_code:
+                u9_code = info.get('u9')
+                break
+
+        if not u9_code:
+            continue
+
+        # 查找STP零件
+        stp_info = u9_to_stp.get(u9_code)
+        if stp_info:
+            comp.library_part = stp_info.get('stp_name', '')
+            comp.match_confidence = 1.0
+            comp.match_reason = f"通过VMB-8A三层映射匹配（型号:{model_code}, U9:{u9_code}）"
+
+
 def apply_knowledge(
     dxf_path: str,
     bom_path: str,
@@ -520,6 +593,9 @@ def apply_knowledge(
 
     # 用学到的知识增强匹配结果
     _enhance_with_knowledge(result, knowledge_list)
+
+    # 尝试使用VMB-8A三层映射增强匹配（如果存在）
+    _enhance_with_vmb8a_mapping(result, pid)
 
     # 以点料表为最全基准：遍历全部有U9码的物料，匹配库型号（未匹配的标红备用）
     result.bom_library_models = _build_bom_library_models(bom, knowledge_list)

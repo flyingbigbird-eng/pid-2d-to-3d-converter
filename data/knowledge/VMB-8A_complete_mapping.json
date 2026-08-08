@@ -1,0 +1,488 @@
+{
+  "case_name": "VMB-8A",
+  "mapping_strategy": "PID->型号->U9->STP 三层映射",
+  "pid_to_model": {
+    "手动隔膜阀 1/4\"": {
+      "component_type": "手动隔膜阀",
+      "pipe_size": "1/4\"",
+      "size_abbr": "14",
+      "model_code": "手动隔膜阀 14",
+      "u9": "000000122588",
+      "material": "PFA"
+    },
+    "手动隔膜阀 1/2\"": {
+      "component_type": "手动隔膜阀",
+      "pipe_size": "1/2\"",
+      "size_abbr": "12",
+      "model_code": "手动隔膜阀 12",
+      "u9": "000000121786",
+      "material": "PFA"
+    },
+    "手动隔膜阀 1\"": {
+      "component_type": "手动隔膜阀",
+      "pipe_size": "1\"",
+      "size_abbr": "1",
+      "model_code": "手动隔膜阀 1",
+      "u9": "000000125108",
+      "material": "PFA"
+    },
+    "气动隔膜阀 1/2\"": {
+      "component_type": "气动隔膜阀",
+      "pipe_size": "1/2\"",
+      "size_abbr": "12",
+      "model_code": "气动隔膜阀 12",
+      "u9": "000000123141",
+      "material": "PFA"
+    },
+    "气动隔膜阀 1\"": {
+      "component_type": "气动隔膜阀",
+      "pipe_size": "1\"",
+      "size_abbr": "1",
+      "model_code": "气动隔膜阀 1",
+      "u9": "000000122589",
+      "material": "PFA"
+    },
+    "单向阀1/2\"": {
+      "component_type": "单向阀1/2\"",
+      "pipe_size": "",
+      "size_abbr": "",
+      "model_code": "单向阀1/2\"",
+      "u9": "000001112154",
+      "material": "PFA"
+    },
+    "管道1/4\"": {
+      "component_type": "管道1/4\"",
+      "pipe_size": "",
+      "size_abbr": "",
+      "model_code": "管道1/4\"",
+      "u9": "000000124115",
+      "material": "PFA 951"
+    },
+    "管道1/2\"": {
+      "component_type": "管道1/2\"",
+      "pipe_size": "",
+      "size_abbr": "",
+      "model_code": "管道1/2\"",
+      "u9": "000000124109",
+      "material": "PFA 951"
+    },
+    "管道1\"": {
+      "component_type": "管道1\"",
+      "pipe_size": "",
+      "size_abbr": "",
+      "model_code": "管道1\"",
+      "u9": "000000124376",
+      "material": "PFA 951"
+    },
+    "大小头1/2x1/4\"": {
+      "component_type": "大小头1/2x1/4\"",
+      "pipe_size": "",
+      "size_abbr": "",
+      "model_code": "大小头1/2x1/4\"",
+      "u9": "000000000062",
+      "material": "PFA"
+    },
+    "大小头1x1/2\"": {
+      "component_type": "大小头1x1/2\"",
+      "pipe_size": "",
+      "size_abbr": "",
+      "model_code": "大小头1x1/2\"",
+      "u9": "000000000056",
+      "material": "PFA"
+    },
+    "等径三通1/2\"x1/2\"x1/2\"": {
+      "component_type": "等径三通1/2\"x1/2\"x1/2\"",
+      "pipe_size": "",
+      "size_abbr": "",
+      "model_code": "等径三通1/2\"x1/2\"x1/2\"",
+      "u9": "000000000038",
+      "material": "PFA"
+    },
+    "等径弯头1\"x1\"": {
+      "component_type": "等径弯头1\"x1\"",
+      "pipe_size": "",
+      "size_abbr": "",
+      "model_code": "等径弯头1\"x1\"",
+      "u9": "000000000052",
+      "material": "PFA"
+    },
+    "等径弯头1/2\"x1/2\"": {
+      "component_type": "等径弯头1/2\"x1/2\"",
+      "pipe_size": "",
+      "size_abbr": "",
+      "model_code": "等径弯头1/2\"x1/2\"",
+      "u9": "000000000050",
+      "material": "PFA"
+    },
+    "异径三通1\"x1/2\"x1\"": {
+      "component_type": "异径三通1\"x1/2\"x1\"",
+      "pipe_size": "",
+      "size_abbr": "",
+      "model_code": "异径三通1\"x1/2\"x1\"",
+      "u9": "000000000042",
+      "material": "PFA"
+    },
+    "酸碱4支路VMB电控成套": {
+      "component_type": "酸碱4支路VMB电控成套",
+      "pipe_size": "",
+      "size_abbr": "",
+      "model_code": "酸碱4支路VMB电控成套",
+      "u9": "001111203350",
+      "material": "/"
+    },
+    "壳体PP": {
+      "component_type": "壳体PP",
+      "pipe_size": "",
+      "size_abbr": "",
+      "model_code": "壳体PP",
+      "u9": "001111120412",
+      "material": "PP"
+    },
+    "Cap1/4\"": {
+      "component_type": "Cap1/4\"",
+      "pipe_size": "",
+      "size_abbr": "",
+      "model_code": "Cap1/4\"",
+      "u9": "000000123887",
+      "material": "PFA"
+    },
+    "Cap1/2\"": {
+      "component_type": "Cap1/2\"",
+      "pipe_size": "",
+      "size_abbr": "",
+      "model_code": "Cap1/2\"",
+      "u9": "000000121645",
+      "material": "PFA"
+    }
+  },
+  "model_to_u9": {
+    "手动隔膜阀 14": {
+      "u9": "000000122588",
+      "material": "PFA",
+      "pid_names": [
+        "手动隔膜阀 1/4\""
+      ]
+    },
+    "手动隔膜阀 12": {
+      "u9": "000000121786",
+      "material": "PFA",
+      "pid_names": [
+        "手动隔膜阀 1/2\""
+      ]
+    },
+    "手动隔膜阀 1": {
+      "u9": "000000125108",
+      "material": "PFA",
+      "pid_names": [
+        "手动隔膜阀 1\""
+      ]
+    },
+    "气动隔膜阀 12": {
+      "u9": "000000123141",
+      "material": "PFA",
+      "pid_names": [
+        "气动隔膜阀 1/2\""
+      ]
+    },
+    "气动隔膜阀 1": {
+      "u9": "000000122589",
+      "material": "PFA",
+      "pid_names": [
+        "气动隔膜阀 1\""
+      ]
+    },
+    "单向阀1/2\"": {
+      "u9": "000001112154",
+      "material": "PFA",
+      "pid_names": [
+        "单向阀1/2\""
+      ]
+    },
+    "管道1/4\"": {
+      "u9": "000000124115",
+      "material": "PFA 951",
+      "pid_names": [
+        "管道1/4\""
+      ]
+    },
+    "管道1/2\"": {
+      "u9": "000000124109",
+      "material": "PFA 951",
+      "pid_names": [
+        "管道1/2\""
+      ]
+    },
+    "管道1\"": {
+      "u9": "000000124376",
+      "material": "PFA 951",
+      "pid_names": [
+        "管道1\""
+      ]
+    },
+    "大小头1/2x1/4\"": {
+      "u9": "000000000062",
+      "material": "PFA",
+      "pid_names": [
+        "大小头1/2x1/4\""
+      ]
+    },
+    "大小头1x1/2\"": {
+      "u9": "000000000056",
+      "material": "PFA",
+      "pid_names": [
+        "大小头1x1/2\""
+      ]
+    },
+    "等径三通1/2\"x1/2\"x1/2\"": {
+      "u9": "000000000038",
+      "material": "PFA",
+      "pid_names": [
+        "等径三通1/2\"x1/2\"x1/2\""
+      ]
+    },
+    "等径弯头1\"x1\"": {
+      "u9": "000000000052",
+      "material": "PFA",
+      "pid_names": [
+        "等径弯头1\"x1\""
+      ]
+    },
+    "等径弯头1/2\"x1/2\"": {
+      "u9": "000000000050",
+      "material": "PFA",
+      "pid_names": [
+        "等径弯头1/2\"x1/2\""
+      ]
+    },
+    "异径三通1\"x1/2\"x1\"": {
+      "u9": "000000000042",
+      "material": "PFA",
+      "pid_names": [
+        "异径三通1\"x1/2\"x1\""
+      ]
+    },
+    "酸碱4支路VMB电控成套": {
+      "u9": "001111203350",
+      "material": "/",
+      "pid_names": [
+        "酸碱4支路VMB电控成套"
+      ]
+    },
+    "壳体PP": {
+      "u9": "001111120412",
+      "material": "PP",
+      "pid_names": [
+        "壳体PP"
+      ]
+    },
+    "Cap1/4\"": {
+      "u9": "000000123887",
+      "material": "PFA",
+      "pid_names": [
+        "Cap1/4\""
+      ]
+    },
+    "Cap1/2\"": {
+      "u9": "000000121645",
+      "material": "PFA",
+      "pid_names": [
+        "Cap1/2\""
+      ]
+    }
+  },
+  "u9_to_stp": {
+    "000000000038": {
+      "model_file": "000000000038等径三通12x12x12.ipt",
+      "stp_name": "等径三通12x12x12",
+      "model_code": "等径三通12x12x12"
+    },
+    "000000000042": {
+      "model_file": "000000000042异径三通1x12x1.ipt",
+      "stp_name": "异径三通1x12x1",
+      "model_code": "异径三通1x12x1"
+    },
+    "000000000050": {
+      "model_file": "000000000050等径弯头12x12.ipt",
+      "stp_name": "等径弯头12x12",
+      "model_code": "等径弯头12x12"
+    },
+    "000000000052": {
+      "model_file": "000000000052等径弯头1x1.ipt",
+      "stp_name": "等径弯头1x1",
+      "model_code": "等径弯头1x1"
+    },
+    "000000000056": {
+      "model_file": "000000000056大小头1x12.ipt",
+      "stp_name": "大小头1x12",
+      "model_code": "大小头1x12"
+    },
+    "000000000062": {
+      "model_file": "000000000062大小头12x14.ipt",
+      "stp_name": "大小头12x14",
+      "model_code": "大小头12x14"
+    },
+    "000000121637": {
+      "model_file": "000000121637气管快插接头.ipt",
+      "stp_name": "气管快插接头",
+      "model_code": "气管快插接头"
+    },
+    "000000121786": {
+      "model_file": "000000121786手动隔膜阀 12.ipt",
+      "stp_name": "手动隔膜阀 12",
+      "model_code": "手动隔膜阀 12"
+    },
+    "000000121812": {
+      "model_file": "000000121812球阀34.ipt",
+      "stp_name": "球阀34",
+      "model_code": "球阀34"
+    },
+    "000000121857": {
+      "model_file": "000000121857圆盘式负压表.ipt",
+      "stp_name": "圆盘式负压表",
+      "model_code": "圆盘式负压表"
+    },
+    "000000121858": {
+      "model_file": "000000121858PVC门把手.ipt",
+      "stp_name": "PVC门把手",
+      "model_code": "PVC门把手"
+    },
+    "000000122478": {
+      "model_file": "000000122478门锁.ipt",
+      "stp_name": "门锁",
+      "model_code": "门锁"
+    },
+    "000000122479": {
+      "model_file": "000000122479Hinge-Small.ipt",
+      "stp_name": "Hinge-Small",
+      "model_code": "Hinge-Small"
+    },
+    "000000122492": {
+      "model_file": "000000122492外套管牙接头-50A-PP.ipt",
+      "stp_name": "外套管牙接头-50A-PP",
+      "model_code": "外套管牙接头-50A-PP"
+    },
+    "000000122588": {
+      "model_file": "000000122588手动隔膜阀 14.ipt",
+      "stp_name": "手动隔膜阀 14",
+      "model_code": "手动隔膜阀 14"
+    },
+    "000000122589": {
+      "model_file": "000000122589气动隔膜阀 1.ipt",
+      "stp_name": "气动隔膜阀 1",
+      "model_code": "气动隔膜阀 1"
+    },
+    "000000122921": {
+      "model_file": "000000122921气管Φ6.ipt",
+      "stp_name": "气管Φ6",
+      "model_code": "气管Φ6"
+    },
+    "000000123100": {
+      "model_file": "000000123100调压阀14",
+      "stp_name": "000000123100调压阀14",
+      "model_code": "000000123100调压阀14"
+    },
+    "000000123141": {
+      "model_file": "000000123141气动隔膜阀 12.ipt",
+      "stp_name": "气动隔膜阀 12",
+      "model_code": "气动隔膜阀 12"
+    },
+    "000000123513": {
+      "model_file": "000000123513外套管牙接头-25A-PP.ipt",
+      "stp_name": "外套管牙接头-25A-PP",
+      "model_code": "外套管牙接头-25A-PP"
+    },
+    "000000124109": {
+      "model_file": "000000124109管道12.ipt",
+      "stp_name": "管道12",
+      "model_code": "管道12"
+    },
+    "000000124115": {
+      "model_file": "000000124115管道14.ipt",
+      "stp_name": "管道14",
+      "model_code": "管道14"
+    },
+    "000000124376": {
+      "model_file": "000000124376管道1.ipt",
+      "stp_name": "管道1",
+      "model_code": "管道1"
+    },
+    "000000124404": {
+      "model_file": "000000124404大小头DN40xDN20.ipt",
+      "stp_name": "大小头DN40xDN20",
+      "model_code": "大小头DN40xDN20"
+    },
+    "000000124405": {
+      "model_file": "000000124405穿板.ipt",
+      "stp_name": "穿板",
+      "model_code": "穿板"
+    },
+    "000000125108": {
+      "model_file": "000000125108手动隔膜阀 1.ipt",
+      "stp_name": "手动隔膜阀 1",
+      "model_code": "手动隔膜阀 1"
+    },
+    "000001112154": {
+      "model_file": "000001112154单向阀12.ipt",
+      "stp_name": "单向阀12",
+      "model_code": "单向阀12"
+    },
+    "000001116132": {
+      "model_file": "000001116132黑色转舌锁.ipt",
+      "stp_name": "黑色转舌锁",
+      "model_code": "黑色转舌锁"
+    },
+    "001111112096": {
+      "model_file": "001111112096介质标签.ipt",
+      "stp_name": "介质标签",
+      "model_code": "介质标签"
+    },
+    "001111112097": {
+      "model_file": "001111112097EMO标签.ipt",
+      "stp_name": "EMO标签",
+      "model_code": "EMO标签"
+    },
+    "001111120412": {
+      "model_file": "001111120412PP壳体.ipt",
+      "stp_name": "PP壳体",
+      "model_code": "PP壳体"
+    },
+    "001111120413": {
+      "model_file": "001111120413SS壳体.ipt",
+      "stp_name": "SS壳体",
+      "model_code": "SS壳体"
+    },
+    "001111203350": {
+      "model_file": "001111203350酸碱4支路VMB电控成套",
+      "stp_name": "001111203350酸碱4支路VMB电控成套",
+      "model_code": "001111203350酸碱4支路VMB电控成套"
+    },
+    "001111203351": {
+      "model_file": "001111203351压差开关.ipt",
+      "stp_name": "压差开关",
+      "model_code": "压差开关"
+    },
+    "001111203352": {
+      "model_file": "001111203352橡胶堵头.ipt",
+      "stp_name": "橡胶堵头",
+      "model_code": "橡胶堵头"
+    },
+    "001111203353": {
+      "model_file": "001111203353浮球sensor.ipt",
+      "stp_name": "浮球sensor",
+      "model_code": "浮球sensor"
+    }
+  },
+  "naming_rules": {
+    "inch_to_abbr": {
+      "1/4\"": "14",
+      "1/2\"": "12",
+      "3/4\"": "34",
+      "1\"": "1"
+    }
+  },
+  "stats": {
+    "total_pid_components": 19,
+    "unique_model_codes": 19,
+    "total_stp_parts": 36
+  }
+}
